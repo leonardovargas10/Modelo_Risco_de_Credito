@@ -26,12 +26,14 @@ Dada a situação, o desafio é ajudá-los a desbloquear todo o potencial de seu
 ## Fundamentação Teórica
 
 - [x] Fundamentos de Risco de Crédito
+- [x] Fundamentos de Modelagem de Crédito
 - [x] Fundamentos de GIT
 - [x] SQL
 - [x] Python
-- [x] Análise de Dados 
+- [x] PySpark
+- [x] Análise de Dados
+- [x] Técnicas de Modelagem Matemática e Estatística
 - [x] Técnicas de Machine Learning
-- [x] Modelagem Matemática e Estatística
 
 ## Status do Projeto
 
