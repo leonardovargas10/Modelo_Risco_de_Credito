@@ -710,6 +710,34 @@ def ks(y_proba_0, y_proba_1):
 
     return KS, ks_message
 
+def woe(df, feature, target):
+    good = df.loc[df[target] == 1].groupby(feature, as_index = False)[target].count().rename({target:'good'}, axis = 1)
+    bad = df.loc[df[target] == 0].groupby(feature, as_index = False)[target].count().rename({target:'bad'}, axis = 1)
+
+    woe = good.merge(bad, on = feature, how = 'left')
+    woe['percent_good'] = woe['good']/woe['good'].sum()
+    woe['percent_bad'] = woe['bad']/woe['bad'].sum()
+    woe['woe'] = round(np.log(woe['percent_good']/woe['percent_bad']), 3)
+    woe['iv'] = ((woe['percent_good'] - woe['percent_bad'])*np.log(woe['percent_good']/woe['percent_bad'])).sum()
+
+    woe['woe'].fillna(0, inplace = True)
+    woe['iv'].fillna(0, inplace = True)
+
+    weight_of_evidence = woe['woe'].unique()
+    iv = round(woe['iv'].max(), 2)
+
+    x = df[feature].unique()
+    y = woe['woe']
+    plt.figure(figsize = (10, 4))
+    plt.plot(x, y, marker = 'o', linestyle = '--', linewidth=2, color = '#1FB3E5')
+    for label, value in zip(x, y):
+        plt.text(x = label, y = value, s = str(value), fontsize = 20, color = 'red', ha='left', va='center', rotation = 45)
+    plt.title(f'WOE of "{feature}" with an Information Value {iv} ', fontsize=14)
+    plt.xlabel('Classes', fontsize=14)
+    plt.ylabel('Weight of Evidence', fontsize=14)
+    plt.xticks(ha='right', fontsize = 10, rotation = 45)
+    #return woe
+
 def calculate_ks(y_proba_0, y_proba_1):
     # Calcular as probabilidades acumuladas
     proba_cum_0 = np.cumsum(y_proba_0) / np.sum(y_proba_0)
@@ -720,18 +748,37 @@ def calculate_ks(y_proba_0, y_proba_1):
 
     return KS
 
-def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_predict_test):
-    accuracy = accuracy_score(y_train, y_predict_train)
-    precision = precision_score(y_train, y_predict_train)
-    recall = recall_score(y_train, y_predict_train)
-    roc_curve = roc_auc_score(y_train, y_predict_train)
-    metricas_treino = pd.DataFrame({'Acuracia':accuracy, 'Precisao':precision, 'Recall':recall, 'AUC':roc_curve, 'Etapa':'treino','Classificador':classificador}, index = np.arange(1))
+# def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_predict_test):
+#     accuracy = accuracy_score(y_train, y_predict_train)
+#     precision = precision_score(y_train, y_predict_train)
+#     recall = recall_score(y_train, y_predict_train)
+#     roc_curve = roc_auc_score(y_train, y_predict_train)
+#     metricas_treino = pd.DataFrame({'Acuracia':accuracy, 'Precisao':precision, 'Recall':recall, 'AUC':roc_curve, 'Etapa':'treino','Classificador':classificador}, index = np.arange(1))
     
-    accuracy = accuracy_score(y_test, y_predict_test)
-    precision = precision_score(y_test, y_predict_test)
-    recall = recall_score(y_test, y_predict_test)
-    roc_curve = roc_auc_score(y_test, y_predict_test)
-    metricas_teste = pd.DataFrame({'Acuracia':accuracy, 'Precisao':precision, 'Recall':recall, 'AUC':roc_curve, 'Etapa':'teste','Classificador':classificador}, index = np.arange(1, 2))
+#     accuracy = accuracy_score(y_test, y_predict_test)
+#     precision = precision_score(y_test, y_predict_test)
+#     recall = recall_score(y_test, y_predict_test)
+#     roc_curve = roc_auc_score(y_test, y_predict_test)
+#     metricas_teste = pd.DataFrame({'Acuracia':accuracy, 'Precisao':precision, 'Recall':recall, 'AUC':roc_curve, 'Etapa':'teste','Classificador':classificador}, index = np.arange(1, 2))
+    
+#     metricas_finais = pd.concat([metricas_treino, metricas_teste])
+
+#     return metricas_finais
+
+def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
+    accuracy_train = accuracy_score(y_train, y_predict_train)
+    precision_train = precision_score(y_train, y_predict_train)
+    recall_train = recall_score(y_train, y_predict_train)
+    roc_auc_train = roc_auc_score(y_train, y_predict_proba_train[:, 1])
+    
+    metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'AUC': roc_auc_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
+    
+    accuracy_test = accuracy_score(y_test, y_predict_test)
+    precision_test = precision_score(y_test, y_predict_test)
+    recall_test = recall_score(y_test, y_predict_test)
+    roc_auc_test = roc_auc_score(y_test, y_predict_proba_test[:, 1])
+    
+    metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'AUC': roc_auc_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
     
     metricas_finais = pd.concat([metricas_treino, metricas_teste])
 
@@ -843,6 +890,15 @@ def discretiza_variavel(df, variavel_quant, variavel_qualit, bins, labels, right
         right = right
     )
     df.drop(variavel_quant, axis = 1, inplace = True)
+
+def transform_to_deciles(df, variavel_continua):
+    # Calcula os limites dos deciles
+    decile_limits = [i / 10 for i in range(11)]  # [0.0, 0.1, 0.2, ..., 1.0]
+    
+    # Aplica a função qcut para transformar a variável em deciles
+    deciles = pd.qcut(df[variavel_continua], q=10, labels=False, duplicates='drop')
+    
+    return deciles
 
 def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight):
 
