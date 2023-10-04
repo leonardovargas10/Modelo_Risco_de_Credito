@@ -900,6 +900,16 @@ def transform_to_deciles(df, variavel_continua):
     
     return deciles
 
+def transform_to_percentiles(df, variavel_continua):
+    # Calcula os limites dos percentis de 0,01 a 0,95 em incrementos de 0,01
+    percentile_limits = [i / 100 for i in range(1, 100, 10)]  # [0.01, 0.02, ..., 0.95]
+    
+    # Aplica a função qcut para transformar a variável em percentis
+    percentiles = pd.qcut(df[variavel_continua], q=percentile_limits, labels=False, duplicates='drop')
+    
+    return percentiles
+
+
 def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight):
 
     # Define as colunas categóricas e numéricas
