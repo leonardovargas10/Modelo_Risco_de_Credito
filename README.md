@@ -15,13 +15,11 @@ O trabalho visa aplicar o conhecimento assimilado durante o curso de Engenharia 
 
 ## Descrição do Projeto 
 
-[KAGGLE] <https://www.kaggle.com/c/home-credit-default-risk>
+[KAGGLE] <https://www.kaggle.com/datasets/adarshsng/lending-club-loan-data-csv/data>
 
-Muitas pessoas lutam para obter empréstimos devido a históricos de crédito insuficientes ou inexistentes. E, infelizmente, essa população é frequentemente aproveitada por credores não confiáveis.
+Lending Club é uma empresa de empréstimos peer-to-peer com sede nos EUA. Eles combinam pessoas que desejam investir dinheiro com pessoas que desejam pedir dinheiro emprestado. Quando os investidores investem o seu dinheiro através do Lending Club, esse dinheiro é repassado aos mutuários e, quando os mutuários pagam os seus empréstimos, o capital mais os juros são repassados ​​aos investidores. É uma vitória para todos, pois podem obter taxas de empréstimo normalmente mais baixas e retornos mais elevados para os investidores.
 
-O Crédito Habitação busca ampliar a inclusão financeira para a população desbancarizada, proporcionando uma experiência de empréstimo positiva e segura. Para garantir que essa população carente tenha uma experiência de empréstimo positiva, o Home Credit utiliza uma variedade de dados alternativos - incluindo informações de telecomunicações e transações - para prever a capacidade de pagamento de seus clientes.
-
-Dada a situação, o desafio é ajudá-los a desbloquear todo o potencial de seus dados. Isso garantirá que os clientes capazes de pagar não sejam rejeitados e que os empréstimos sejam concedidos com um principal, vencimento e calendário de pagamento que capacitará seus clientes a serem bem-sucedidos.
+O conjunto de dados Lending Club contém dados completos de empréstimos para todos os empréstimos emitidos entre 2007-2015, incluindo a situação atual do empréstimo (atual, atrasado, totalmente pago, etc.) e as informações de pagamento mais recentes. Os recursos (também conhecidos como variáveis) incluem pontuação de crédito, número de consultas financeiras, endereço incluindo códigos postais e estado, e cobranças, entre outros. As cobranças indicam se o cliente perdeu um ou mais pagamentos e a equipe está tentando recuperar o dinheiro. O arquivo é uma amostra da base de dados exposta.
 
 ## Fundamentação Teórica
 

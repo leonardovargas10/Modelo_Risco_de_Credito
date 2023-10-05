@@ -1,4 +1,3 @@
-data
-data_raw.zip
+old
 *.parquet
 *.csv
