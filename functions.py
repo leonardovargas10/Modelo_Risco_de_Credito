@@ -4,6 +4,7 @@ import builtins as builtins
 import matplotlib.pyplot as plt
 import seaborn as sns 
 from IPython.display import display, Image
+from tabulate import tabulate
 
 ## Bibliotecas de Modelagem Matemática e Estatística
 import numpy as np
@@ -41,12 +42,15 @@ from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, reca
 
 # Parâmetros de Otimização
 import warnings
+%matplotlib inline
 sns.set(style="whitegrid", font_scale=1.2)
 plt.rcParams['font.family'] = 'Arial'
 plt.rcParams['font.size'] = '14'
 plt.rcParams['figure.figsize'] = [10, 5]
 pd.set_option('display.max_rows', 100)
 pd.set_option('display.max_columns', 100)
+pd.set_option('display.max_colwidth', None)
+pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.float_format', lambda x: '%.2f' % x) # Tira os números do formato de Notação Científica
 np.set_printoptions(suppress=True) # Tira os números do formato de Notação Científica em Numpy Arrays
 warnings.filterwarnings('ignore')
@@ -79,7 +83,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                 )
 
             ax.set_ylim(0, builtins.max(sizes)*1.1)
-            ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+            ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=0, ha='right', fontsize=10)
             # Formatação manual dos rótulos do eixo y para remover a notação científica
             ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
             # Adicionamos os nomes das categorias no eixo x
