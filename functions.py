@@ -42,19 +42,19 @@ from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, reca
 
 # Parâmetros de Otimização
 import warnings
-%matplotlib inline
-sns.set(style="whitegrid", font_scale=1.2)
-plt.rcParams['font.family'] = 'Arial'
-plt.rcParams['font.size'] = '14'
-plt.rcParams['figure.figsize'] = [10, 5]
-pd.set_option('display.max_rows', 100)
-pd.set_option('display.max_columns', 100)
-pd.set_option('display.max_colwidth', None)
-pd.set_option('display.expand_frame_repr', False)
-pd.set_option('display.float_format', lambda x: '%.2f' % x) # Tira os números do formato de Notação Científica
-np.set_printoptions(suppress=True) # Tira os números do formato de Notação Científica em Numpy Arrays
-warnings.filterwarnings('ignore')
-warnings.simplefilter(action='ignore', category=FutureWarning) # Retira Future Warnings
+# %matplotlib inline
+# sns.set(style="whitegrid", font_scale=1.2)
+# plt.rcParams['font.family'] = 'Arial'
+# plt.rcParams['font.size'] = '14'
+# plt.rcParams['figure.figsize'] = [10, 5]
+# pd.set_option('display.max_rows', 100)
+# pd.set_option('display.max_columns', 100)
+# pd.set_option('display.max_colwidth', None)
+# pd.set_option('display.expand_frame_repr', False)
+# pd.set_option('display.float_format', lambda x: '%.2f' % x) # Tira os números do formato de Notação Científica
+# np.set_printoptions(suppress=True) # Tira os números do formato de Notação Científica em Numpy Arrays
+# warnings.filterwarnings('ignore')
+# warnings.simplefilter(action='ignore', category=FutureWarning) # Retira Future Warnings
 
 
 def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
@@ -577,6 +577,21 @@ def plota_dispersao(df, titulo,  x, y, metodo):
     sns.despine()
     plt.tight_layout()
     plt.show()
+
+def verifica_tipo_variavel(df):
+    analytics = df.copy()
+
+    qualitativas = [column for column in analytics.columns if analytics[column].dtype.name == 'object']
+    discretas = [column for column in analytics.columns if (analytics[column].dtype.name != 'object') and (analytics[column].nunique() <= 50)]
+    continuas = [column for column in analytics.columns if (analytics[column].dtype.name != 'object') and (analytics[column].nunique() > 50)]
+
+    qualitativas = pd.DataFrame({'variaveis':qualitativas, 'tipo':'qualitativa'})
+    discretas = pd.DataFrame({'variaveis':discretas, 'tipo':'discreta'})
+    continuas = pd.DataFrame({'variaveis':continuas, 'tipo':'continua'})
+
+    variaveis = pd.concat([qualitativas, discretas, continuas])
+
+    return variaveis
 
 def analisa_correlacao(metodo, df):
     plt.figure(figsize=(14, 7))
