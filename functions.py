@@ -13,7 +13,7 @@ import scipy.stats as stats
 import statsmodels
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
-from scipy.stats import normaltest, ttest_ind, ttest_rel, mannwhitneyu, wilcoxon, kruskal, uniform
+from scipy.stats import normaltest, ttest_ind, ttest_rel, mannwhitneyu, wilcoxon, kruskal, uniform, chi2_contingency
 from statsmodels.stats.weightstats import ztest
 from statsmodels.stats.diagnostic import lilliefors
 
@@ -57,7 +57,7 @@ import warnings
 # warnings.simplefilter(action='ignore', category=FutureWarning) # Retira Future Warnings
 
 
-def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
+def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo, rotation):
     if hue != False:
         if (linhas == 1) and (colunas == 1):
             k = 0
@@ -83,7 +83,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                 )
 
             ax.set_ylim(0, builtins.max(sizes)*1.1)
-            ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=0, ha='right', fontsize=10)
+            ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
             # Formatação manual dos rótulos do eixo y para remover a notação científica
             ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
             # Adicionamos os nomes das categorias no eixo x
@@ -116,7 +116,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                                 fontsize = 12
                         )
                     ax.set_ylim(0, builtins.max(sizes)*1.1)
-                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
                     # Formatação manual dos rótulos do eixo y para remover a notação científica
                     ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
                     # Adicionamos os nomes das categorias no eixo x
@@ -149,7 +149,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                                 fontsize = 12
                         )
                     ax.set_ylim(0, builtins.max(sizes)*1.1)
-                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
                     # Formatação manual dos rótulos do eixo y para remover a notação científica
                     ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
                     # Adicionamos os nomes das categorias no eixo x
@@ -182,7 +182,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                                 fontsize = 12
                         )
                     ax.set_ylim(0, builtins.max(sizes)*1.1)
-                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
                     # Formatação manual dos rótulos do eixo y para remover a notação científica
                     ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
                     # Adicionamos os nomes das categorias no eixo x
@@ -213,7 +213,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                         fontsize = 12
                 )
             ax.set_ylim(0, builtins.max(sizes)*1.1)
-            ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+            ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
             # Formatação manual dos rótulos do eixo y para remover a notação científica
             ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
             # Adicionamos os nomes das categorias no eixo x
@@ -246,7 +246,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                                 fontsize = 12
                         )
                     ax.set_ylim(0, builtins.max(sizes)*1.1)
-                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
                     # Formatação manual dos rótulos do eixo y para remover a notação científica
                     ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
                     # Adicionamos os nomes das categorias no eixo x
@@ -280,7 +280,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                                 fontsize = 12
                         )
                     ax.set_ylim(0, builtins.max(sizes)*1.1)
-                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
                     # Formatação manual dos rótulos do eixo y para remover a notação científica
                     ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
                     # Adicionamos os nomes das categorias no eixo x
@@ -314,7 +314,7 @@ def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo):
                                 fontsize = 12
                         )
                     ax.set_ylim(0, builtins.max(sizes)*1.1)
-                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation=45, ha='right', fontsize=10)
+                    ax.set_xticklabels(df[lista_variaveis[k]].unique(), rotation = rotation, ha='right', fontsize=10)
                     # Formatação manual dos rótulos do eixo y para remover a notação científica
                     ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
                     # Adicionamos os nomes das categorias no eixo x
@@ -719,6 +719,19 @@ def teste_hipotese_muitas_amostras_independentes(amostras, variavel):
     else:
         print(f'Pelo teste de Kruskal-Wallis, há diferença significativa entre as medianas das amostras')
 
+def teste_hipotese_duas_variaveis_categoricas(df, variavel1, variavel2):
+    # Crie tabelas de contingência
+    crosstab = pd.crosstab(df[variavel1], df[variavel2])
+    
+    # Realize o teste qui-quadrado
+    chi2, p, _, _ = chi2_contingency(crosstab)
+    
+    # Verifique o valor-p
+    if p > 0.05:
+        print(f'Pelo Teste Qui-Quadrado, não há associação significativa entre {variavel1} e {variavel2}.')
+    else:
+        print(f'Pelo Teste Qui-Quadrado, há associação significativa entre {variavel1} e {variavel2}.')
+
 def ks(y_proba_0, y_proba_1):
     KS, p_value = stats.ks_2samp(y_proba_0, y_proba_1)
 
@@ -730,8 +743,8 @@ def ks(y_proba_0, y_proba_1):
     return KS, ks_message
 
 def woe(df, feature, target):
-    good = df.loc[df[target] == 1].groupby(feature, as_index = False)[target].count().rename({target:'good'}, axis = 1)
-    bad = df.loc[df[target] == 0].groupby(feature, as_index = False)[target].count().rename({target:'bad'}, axis = 1)
+    good = df.loc[df[target] == 'BAD'].groupby(feature, as_index = False)[target].count().rename({target:'good'}, axis = 1)
+    bad = df.loc[df[target] == 'GOOD'].groupby(feature, as_index = False)[target].count().rename({target:'bad'}, axis = 1)
 
     woe = good.merge(bad, on = feature, how = 'left')
     woe['percent_good'] = woe['good']/woe['good'].sum()
@@ -751,11 +764,12 @@ def woe(df, feature, target):
     plt.plot(x, y, marker = 'o', linestyle = '--', linewidth=2, color = '#1FB3E5')
     for label, value in zip(x, y):
         plt.text(x = label, y = value, s = str(value), fontsize = 20, color = 'red', ha='left', va='center', rotation = 45)
-    plt.title(f'WOE of "{feature}" with an Information Value {iv} ', fontsize=14)
+    # plt.title(f'WOE of "{feature}" with an Information Value {iv} ', fontsize=14)
+    plt.title(f'Weight of Evidence da variável "{feature}"', fontsize=14)
     plt.xlabel('Classes', fontsize=14)
     plt.ylabel('Weight of Evidence', fontsize=14)
     plt.xticks(ha='right', fontsize = 10, rotation = 45)
-    #return woe
+    # return woe
 
 def calculate_ks(y_proba_0, y_proba_1):
     # Calcular as probabilidades acumuladas
