@@ -56,6 +56,18 @@ import warnings
 # warnings.filterwarnings('ignore')
 # warnings.simplefilter(action='ignore', category=FutureWarning) # Retira Future Warnings
 
+def plota_barras_agrupadas(df, x, y, titulo):
+    ax = sns.barplot(data = df, x = x, y = y)
+    for p in ax.patches:
+        ax.annotate(f'{p.get_height():.0f}', (p.get_x() + p.get_width() / 2., p.get_height()),
+                    ha='center', va='center', fontsize=12, color='black', xytext=(0, 5),
+                    textcoords='offset points')
+    ax.set_title(f'{titulo}')
+    ax.set_xlabel(f'{x}', fontsize = 14)
+    ax.set_ylabel(f'Quantidade de Inadimplentes', fontsize = 14)
+    ax.set_yticklabels(['{:,.0f}'.format(y) for y in ax.get_yticks()], fontsize=10)
+    ax.set_xticklabels(ax.get_xticklabels(), ha='right', fontsize=10)
+    plt.show()
 
 def plota_barras(lista_variaveis, hue, df, linhas, colunas, titulo, rotation):
     if hue != False:
@@ -326,6 +338,9 @@ def plota_histograma(lista_variaveis, hue, df, linhas, colunas, titulo):
 
         if (linhas == 1) and (colunas == 1): 
             k = 0
+
+            df_good = df.loc[df['hue'] == 'GOOD']
+
             mediana = df[lista_variaveis[k]].median()
             media = df[lista_variaveis[k]].mean()
             plt.figure(figsize = (14, 5))
@@ -472,7 +487,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
     if hue != False:
         if (linhas == 1) and (colunas == 1): 
             k = 0
-            plt.figure(figsize = (20, 14))
+            plt.figure(figsize = (10, 7))
             ax = sns.boxplot(x = lista_variaveis[k], data = df, palette = ['#1FB3E5', '#64ED8F', '#B864ED'], orient = 'h', y = hue)
             ax.set_title(f'{titulo}')
             ax.set_xlabel(f'{lista_variaveis[k]}', fontsize = 10)
@@ -481,7 +496,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
             plt.show()
 
         elif linhas == 1:
-            fig, axis = plt.subplots(linhas, colunas, figsize = (20, 14), sharey = True)
+            fig, axis = plt.subplots(linhas, colunas, figsize = (10, 7), sharey = True)
             fig.suptitle(f'{titulo}', fontsize = 10)
             k = 0
             for i in np.arange(linhas):
@@ -493,7 +508,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
                     k = k + 1
             
         elif colunas == 1:
-            fig, axis = plt.subplots(linhas, colunas, figsize = (20, 14), sharey = True)
+            fig, axis = plt.subplots(linhas, colunas, figsize = (10, 7), sharey = True)
             fig.suptitle(f'{titulo}')
             k = 0
             for i in np.arange(linhas):
@@ -505,7 +520,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
                     k = k + 1
             
         else:
-            fig, axis = plt.subplots(linhas, colunas, figsize = (20, 14), sharey = True)
+            fig, axis = plt.subplots(linhas, colunas, figsize = (10, 7), sharey = True)
             fig.suptitle(f'{titulo}')
             k = 0
             for i in np.arange(linhas):
@@ -519,7 +534,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
     else:
         if (linhas == 1) and (colunas == 1): 
             k = 0
-            plt.figure(figsize = (20, 14))
+            plt.figure(figsize = (10, 7))
             ax = sns.boxplot(x = lista_variaveis[k], data = df, color = '#1FB3E5', orient = 'h')
             ax.set_title(f'{titulo}')
             ax.set_xlabel(f'{lista_variaveis[k]}', fontsize = 10)
@@ -528,7 +543,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
             plt.show()
 
         elif linhas == 1:
-            fig, axis = plt.subplots(linhas, colunas, figsize = (20, 14), sharey = True)
+            fig, axis = plt.subplots(linhas, colunas, figsize = (10, 7), sharey = True)
             fig.suptitle(f'{titulo}', fontsize = 10)
             k = 0
             for i in np.arange(linhas):
@@ -540,7 +555,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
                     k = k + 1
 
         elif colunas == 1:
-            fig, axis = plt.subplots(linhas, colunas, figsize = (20, 14), sharey = True)
+            fig, axis = plt.subplots(linhas, colunas, figsize = (10, 7), sharey = True)
             fig.suptitle(f'{titulo}')
             k = 0
             for i in np.arange(linhas):
@@ -552,7 +567,7 @@ def plota_boxplot(lista_variaveis, hue, df, linhas, colunas, titulo):
                     k = k + 1
     
         else:
-            fig, axis = plt.subplots(linhas, colunas, figsize = (20, 14), sharey = True)
+            fig, axis = plt.subplots(linhas, colunas, figsize = (10, 7), sharey = True)
             fig.suptitle(f'{titulo}')
             k = 0
             for i in np.arange(linhas):
