@@ -55,7 +55,6 @@ import warnings
 # np.set_printoptions(suppress=True) # Tira os números do formato de Notação Científica em Numpy Arrays
 # warnings.filterwarnings('ignore')
 # warnings.simplefilter(action='ignore', category=FutureWarning) # Retira Future Warnings
-
 def plota_barras_agrupadas(df, x, y, titulo):
     ax = sns.barplot(data = df, x = x, y = y)
     for p in ax.patches:
