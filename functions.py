@@ -783,6 +783,7 @@ def woe(df, feature, target):
     plt.xlabel('Classes', fontsize=14)
     plt.ylabel('Weight of Evidence', fontsize=14)
     plt.xticks(ha='right', fontsize = 10, rotation = 45)
+    
     # return woe
 
 def calculate_ks(y_proba_0, y_proba_1):
@@ -1139,3 +1140,7 @@ def modelo_oficial(classificador, x, y):
     y_proba_train = model.predict_proba(x)
 
     return model, y_pred_train, y_proba_train
+
+def calcula_juros_compostos(capital_inicial, taxa_de_juros, tempo_em_anos):
+    montante_final = capital_inicial*(1+taxa_de_juros)**tempo_em_anos
+    return montante_final
