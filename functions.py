@@ -596,7 +596,7 @@ def verifica_tipo_variavel(df):
     analytics = df.copy()
 
     qualitativas = [column for column in analytics.columns if analytics[column].dtype.name == 'object']
-    discretas = [column for column in analytics.columns if (analytics[column].dtype.name != 'object') and (analytics[column].nunique() <= 50)]
+    discretas = [column for column in analytics.columns if (analytics[column].dtype.name != 'object') and (analytics[column].nunique() <= 10)]
     continuas = [column for column in analytics.columns if (analytics[column].dtype.name != 'object') and (analytics[column].nunique() > 50)]
 
     qualitativas = pd.DataFrame({'variaveis':qualitativas, 'tipo':'qualitativa'})
