@@ -24,10 +24,10 @@ from sklearn.feature_selection import VarianceThreshold, chi2, mutual_info_class
 
 # Bibliotecas de Pré-Processamento e Pipeline
 from category_encoders import BinaryEncoder
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, MinMaxScaler
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
+from sklearn.impute import SimpleImputer, KNNImputer
 
 # Bibliotecas de Modelos de Machine Learning
 from sklearn.linear_model import LogisticRegression
@@ -595,15 +595,33 @@ def plota_dispersao(df, titulo,  x, y, metodo):
 def verifica_tipo_variavel(df):
     analytics = df.copy()
 
-    qualitativas = [column for column in analytics.columns if analytics[column].dtype.name == 'object']
-    discretas = [column for column in analytics.columns if (analytics[column].dtype.name != 'object') and (analytics[column].nunique() <= 10)]
-    continuas = [column for column in analytics.columns if (analytics[column].dtype.name != 'object') and (analytics[column].nunique() > 50)]
+    qualitativas = [column for column in analytics.columns if 
+            (analytics[column].dtype.name == 'object') 
+         or ('bad_rate' not in str(analytics[column].name.lower()) and 'mean' not in str(analytics[column].name.lower()) and analytics[column].nunique() <= 2)
+         or ('delinq_2yrs' in str(analytics[column].name.lower()))
+        ]
+    quantitativas = [column for column in analytics.columns if column not in qualitativas]
+    # discretas = [column for column in analytics.columns if 
+    # (
+    #     analytics[column].dtype.name != 'object' 
+    #     and analytics[column].nunique() > 2 
+    #     and analytics[column].nunique() <= 50 
+    #     and 'bad_rate' not in str(analytics[column].name.lower()) 
+    #     and 'mean' not in str(analytics[column].name.lower()))
+    # ] 
+    # quantitativas = [column for column in analytics.columns if 
+    # (analytics[column].dtype.name != 'object' and analytics[column].nunique() > 50) 
+    #     or ('bad_rate' in str(analytics[column].name.lower())) 
+    #     or ('mean' in str(analytics[column].name.lower()))
+    # ] 
 
     qualitativas = pd.DataFrame({'variaveis':qualitativas, 'tipo':'qualitativa'})
-    discretas = pd.DataFrame({'variaveis':discretas, 'tipo':'discreta'})
-    continuas = pd.DataFrame({'variaveis':continuas, 'tipo':'continua'})
+    quantitativas = pd.DataFrame({'variaveis':quantitativas, 'tipo':'quantitativas'})
+    #discretas = pd.DataFrame({'variaveis':discretas, 'tipo':'discreta'})
+    #continuas = pd.DataFrame({'variaveis':continuas, 'tipo':'continua'})
 
-    variaveis = pd.concat([qualitativas, discretas, continuas])
+    #variaveis = pd.concat([qualitativas, discretas, continuas])
+    variaveis = pd.concat([qualitativas, quantitativas])
 
     return variaveis
 
