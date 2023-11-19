@@ -38,7 +38,7 @@ from xgboost import XGBClassifier
 from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
 
 # Bibliotecas de Métricas de Machine Learning
-from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, f1_score, confusion_matrix, silhouette_score
+from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, precision_score, recall_score, f1_score, confusion_matrix, silhouette_score
 
 # Parâmetros de Otimização
 import warnings
@@ -592,6 +592,103 @@ def plota_dispersao(df, titulo,  x, y, metodo):
     plt.tight_layout()
     plt.show()
 
+def roc_curve_graph(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
+
+    predict_proba_train = pd.DataFrame(y_predict_proba_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_test = pd.DataFrame(y_predict_proba_test.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+
+    results_train = y_train[[target]].copy()
+    results_train['y_predict_train'] = y_predict_train
+    results_train['predict_proba_0'] = list(predict_proba_train['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results_train['predict_proba_1'] = list(predict_proba_train['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    results_test = y_test[[target]].copy()
+    results_test['y_predict_test'] = y_predict_test
+    results_test['predict_proba_0'] = list(predict_proba_test['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results_test['predict_proba_1'] = list(predict_proba_test['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    # Calculate AUC and ROC for the training set
+    y_true_train = results_train[target]
+    y_scores_train = results_train['predict_proba_1']
+    auc_train = roc_auc_score(y_true_train, y_scores_train)
+    fpr_train, tpr_train, thresholds_train = roc_curve(y_true_train, y_scores_train)
+
+    # Calculate AUC and ROC for the test set
+    y_true_test = results_test[target]
+    y_scores_test = results_test['predict_proba_1']
+    auc_test = roc_auc_score(y_true_test, y_scores_test)
+    fpr_test, tpr_test, thresholds_test = roc_curve(y_true_test, y_scores_test)
+
+    # Plot ROC curves side by side
+    fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+
+    # Training set ROC curve
+    axs[0].plot(fpr_train, tpr_train, label='ROC Curve (AUC = {:.2f})'.format(auc_train), color='blue')
+    axs[0].plot([0, 1], [0, 1], linestyle='--', color='gray')
+    axs[0].set_xlabel('False Positive Rate')
+    axs[0].set_ylabel('True Positive Rate')
+    axs[0].set_title(f'ROC Curve - Training Set - {classificador}')
+    axs[0].legend()
+
+    # Test set ROC curve
+    axs[1].plot(fpr_test, tpr_test, label='ROC Curve (AUC = {:.2f})'.format(auc_test), color='blue')
+    axs[1].plot([0, 1], [0, 1], linestyle='--', color='gray')
+    axs[1].set_xlabel('False Positive Rate')
+    axs[1].set_ylabel('True Positive Rate')
+    axs[1].set_title(f'ROC Curve - Test Set - {classificador}')
+    axs[1].legend()
+
+    plt.show()
+
+from sklearn.metrics import precision_recall_curve, average_precision_score
+
+def precision_recall_graph(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
+
+    predict_proba_train = pd.DataFrame(y_predict_proba_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_test = pd.DataFrame(y_predict_proba_test.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+
+    results_train = y_train[[target]].copy()
+    results_train['y_predict_train'] = y_predict_train
+    results_train['predict_proba_0'] = list(predict_proba_train['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results_train['predict_proba_1'] = list(predict_proba_train['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    results_test = y_test[[target]].copy()
+    results_test['y_predict_test'] = y_predict_test
+    results_test['predict_proba_0'] = list(predict_proba_test['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results_test['predict_proba_1'] = list(predict_proba_test['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    # Calculate Precision-Recall curve and AUC for the training set
+    y_true_train = results_train[target]
+    y_scores_train = results_train['predict_proba_1']
+    precision_train, recall_train, _ = precision_recall_curve(y_true_train, y_scores_train)
+    average_precision_train = average_precision_score(y_true_train, y_scores_train)
+
+    # Calculate Precision-Recall curve and AUC for the test set
+    y_true_test = results_test[target]
+    y_scores_test = results_test['predict_proba_1']
+    precision_test, recall_test, _ = precision_recall_curve(y_true_test, y_scores_test)
+    average_precision_test = average_precision_score(y_true_test, y_scores_test)
+
+    # Plot Precision-Recall curves side by side
+    fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+
+    # Training set Precision-Recall curve
+    axs[0].plot(recall_train, precision_train, label='Precision-Recall Curve', color='green')
+    axs[0].set_xlabel('Recall')
+    axs[0].set_ylabel('Precision')
+    axs[0].set_title(f'Precision-Recall Curve - Training Set - {classificador}')
+    axs[0].legend()
+
+    # Test set Precision-Recall curve
+    axs[1].plot(recall_test, precision_test, label='Precision-Recall Curve ', color='green')
+    axs[1].set_xlabel('Recall')
+    axs[1].set_ylabel('Precision')
+    axs[1].set_title(f'Precision-Recall Curve - Test Set - {classificador}')
+    axs[1].legend()
+
+    plt.show()
+
+
 def verifica_tipo_variavel(df):
     analytics = df.copy()
 
@@ -704,11 +801,16 @@ def remove_features_feature_importance(target, df, class_weight, threshold):
     # Obter as importâncias das features
     feature_importances = model.feature_importances_
 
+    # Cria o DF
+
     # Selecionar as features com importância maior que zero
+
     selected_features = list(x.columns[feature_importances > threshold])
     selected_features.append(target)
 
-    return selected_features
+    feature_importance = [importance for importance in feature_importances if importance > threshold]
+
+    return selected_features, feature_importance
 
 
 
@@ -831,24 +933,49 @@ def calculate_ks(y_proba_0, y_proba_1):
 
 #     return metricas_finais
 
+# def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
+#     accuracy_train = accuracy_score(y_train, y_predict_train)
+#     precision_train = precision_score(y_train, y_predict_train)
+#     recall_train = recall_score(y_train, y_predict_train)
+#     roc_auc_train = roc_auc_score(y_train, y_predict_proba_train[:, 1])
+    
+#     metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'AUC': roc_auc_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
+    
+#     accuracy_test = accuracy_score(y_test, y_predict_test)
+#     precision_test = precision_score(y_test, y_predict_test)
+#     recall_test = recall_score(y_test, y_predict_test)
+#     roc_auc_test = roc_auc_score(y_test, y_predict_proba_test[:, 1])
+    
+#     metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'AUC': roc_auc_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
+    
+#     metricas_finais = pd.concat([metricas_treino, metricas_teste])
+
+#     return metricas_finais
+
 def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
     accuracy_train = accuracy_score(y_train, y_predict_train)
     precision_train = precision_score(y_train, y_predict_train)
     recall_train = recall_score(y_train, y_predict_train)
-    roc_auc_train = roc_auc_score(y_train, y_predict_proba_train[:, 1])
+    #roc_auc_train = roc_auc_score(y_train, y_predict_train)
     
-    metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'AUC': roc_auc_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
+    #metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'AUC': roc_auc_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
+    metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
     
     accuracy_test = accuracy_score(y_test, y_predict_test)
     precision_test = precision_score(y_test, y_predict_test)
     recall_test = recall_score(y_test, y_predict_test)
-    roc_auc_test = roc_auc_score(y_test, y_predict_proba_test[:, 1])
+    #roc_auc_test = roc_auc_score(y_test, y_predict_test)
     
-    metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'AUC': roc_auc_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
+    #metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'AUC': roc_auc_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
+    metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
     
     metricas_finais = pd.concat([metricas_treino, metricas_teste])
 
     return metricas_finais
+
+def metricas_classificacao_modelos_juntos(lista_modelos):
+    metricas_modelos = pd.concat(lista_modelos).set_index('Classificador')
+    return metricas_modelos
 
 def validacao_cruzada_classificacao(classificador, x_train, y_train, class_weight, n_splits):
 
@@ -977,36 +1104,31 @@ def transform_to_percentiles(df, variavel_continua):
 
 
 def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight):
+    cols = list(x_train.columns)
+    imputer = simple_imputer(x_train)
+    x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
+    x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
 
     # Define as colunas categóricas e numéricas
-    qualitativas_numericas = [column for column in x_train.columns if x_train[column].nunique() <= 5]
-    discretas = [column for column in x_train.columns if (x_train[column].nunique() > 5) and (x_train[column].nunique() <= 50)]
-    continuas = [column for column in x_train.columns if x_train[column].nunique() > 50]
-
     models = {
         'Regressão Logística': make_pipeline(
             ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
+                ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+                ('scaler', make_pipeline(MinMaxScaler()), cols)
             ]),
-            LogisticRegression(random_state=42, class_weight={0:1, 1:class_weight}, solver = 'liblinear')
+            LogisticRegression(random_state=42, class_weight={0:1, 1:class_weight}, solver='liblinear')
         ),
         'Random Forest': make_pipeline(
             ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
+                ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
             ]),
             RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, max_depth=4, class_weight={0:1, 1:class_weight})
         ),
         'XGBoost': make_pipeline(
             ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
+                ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
             ]),
-            XGBClassifier(random_state=42, n_estimators=20, max_depth=5, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight = class_weight)
+            XGBClassifier(random_state=42, n_estimators=20, max_depth=5, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight=class_weight)
         )
     }
 
@@ -1158,7 +1280,3 @@ def modelo_oficial(classificador, x, y):
     y_proba_train = model.predict_proba(x)
 
     return model, y_pred_train, y_proba_train
-
-def calcula_juros_compostos(capital_inicial, taxa_de_juros, tempo_em_anos):
-    montante_final = capital_inicial*(1+taxa_de_juros)**tempo_em_anos
-    return montante_final
