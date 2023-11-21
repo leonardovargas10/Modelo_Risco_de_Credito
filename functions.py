@@ -38,7 +38,7 @@ from xgboost import XGBClassifier
 from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
 
 # Bibliotecas de Métricas de Machine Learning
-from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, precision_score, recall_score, f1_score, confusion_matrix, silhouette_score
+from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, precision_score, recall_score, precision_recall_curve, average_precision_score, f1_score, confusion_matrix, silhouette_score
 
 # Parâmetros de Otimização
 import warnings
@@ -592,7 +592,7 @@ def plota_dispersao(df, titulo,  x, y, metodo):
     plt.tight_layout()
     plt.show()
 
-def roc_curve_graph(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
+def auc_precision_recall_ks(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
 
     predict_proba_train = pd.DataFrame(y_predict_proba_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
     predict_proba_test = pd.DataFrame(y_predict_proba_test.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
@@ -602,10 +602,34 @@ def roc_curve_graph(classificador, target, y_train, y_predict_train, y_test, y_p
     results_train['predict_proba_0'] = list(predict_proba_train['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
     results_train['predict_proba_1'] = list(predict_proba_train['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
 
+    results_train_sorted = results_train.sort_values(by='predict_proba_1', ascending=False)
+    results_train_sorted['Cumulative N Population'] = range(1, results_train_sorted.shape[0] + 1)
+    results_train_sorted['Cumulative N Good'] = results_train_sorted[target].cumsum()
+    results_train_sorted['Cumulative N Bad'] = results_train_sorted['Cumulative N Population'] - results_train_sorted['Cumulative N Good']
+    results_train_sorted['Cumulative Perc Population'] = results_train_sorted['Cumulative N Population'] / results_train_sorted.shape[0]
+    results_train_sorted['Cumulative Perc Good'] = results_train_sorted['Cumulative N Good'] / results_train_sorted[target].sum()
+    results_train_sorted['Cumulative Perc Bad'] = results_train_sorted['Cumulative N Bad'] / (results_train_sorted.shape[0] - results_train_sorted[target].sum())
+
+    max_ks_index_train = np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])
+    x_max_ks_train = results_train_sorted['Cumulative Perc Population'].iloc[max_ks_index_train]
+    y_max_ks_train = results_train_sorted['Cumulative Perc Good'].iloc[max_ks_index_train]
+
     results_test = y_test[[target]].copy()
     results_test['y_predict_test'] = y_predict_test
     results_test['predict_proba_0'] = list(predict_proba_test['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
     results_test['predict_proba_1'] = list(predict_proba_test['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    results_test_sorted = results_test.sort_values(by='predict_proba_1', ascending=False)
+    results_test_sorted['Cumulative N Population'] = range(1, results_test_sorted.shape[0] + 1)
+    results_test_sorted['Cumulative N Good'] = results_test_sorted[target].cumsum()
+    results_test_sorted['Cumulative N Bad'] = results_test_sorted['Cumulative N Population'] - results_test_sorted['Cumulative N Good']
+    results_test_sorted['Cumulative Perc Population'] = results_test_sorted['Cumulative N Population'] / results_test_sorted.shape[0]
+    results_test_sorted['Cumulative Perc Good'] = results_test_sorted['Cumulative N Good'] / results_test_sorted[target].sum()
+    results_test_sorted['Cumulative Perc Bad'] = results_test_sorted['Cumulative N Bad'] / (results_test_sorted.shape[0] - results_test_sorted[target].sum())
+
+    max_ks_index_test = np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])
+    x_max_ks_test = results_test_sorted['Cumulative Perc Population'].iloc[max_ks_index_test]
+    y_max_ks_test = results_test_sorted['Cumulative Perc Good'].iloc[max_ks_index_test]
 
     # Calculate AUC and ROC for the training set
     y_true_train = results_train[target]
@@ -619,30 +643,87 @@ def roc_curve_graph(classificador, target, y_train, y_predict_train, y_test, y_p
     auc_test = roc_auc_score(y_true_test, y_scores_test)
     fpr_test, tpr_test, thresholds_test = roc_curve(y_true_test, y_scores_test)
 
-    # Plot ROC curves side by side
-    fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+    # Calculate Precision-Recall curve for the training set
+    y_true_train = results_train[target]
+    y_scores_train = results_train['predict_proba_1']
+    precision_train, recall_train, _ = precision_recall_curve(y_true_train, y_scores_train)
+    average_precision_train = average_precision_score(y_true_train, y_scores_train)
+
+    # Calculate Precision-Recall curve for the test set
+    y_true_test = results_test[target]
+    y_scores_test = results_test['predict_proba_1']
+    precision_test, recall_test, _ = precision_recall_curve(y_true_test, y_scores_test)
+    average_precision_test = average_precision_score(y_true_test, y_scores_test)
+    
+    # Calculate KS curve for the training set
+    KS_test = round(np.max(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad']), 2)
+
+    # Calculate KS curve for the test set
+    KS_train = round(np.max(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad']), 2)
+
+    # Plot ROC and Precision-Recall curves side by side
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
 
     # Training set ROC curve
-    axs[0].plot(fpr_train, tpr_train, label='ROC Curve (AUC = {:.2f})'.format(auc_train), color='blue')
-    axs[0].plot([0, 1], [0, 1], linestyle='--', color='gray')
-    axs[0].set_xlabel('False Positive Rate')
-    axs[0].set_ylabel('True Positive Rate')
-    axs[0].set_title(f'ROC Curve - Training Set - {classificador}')
-    axs[0].legend()
+    axs[0, 0].plot(fpr_train, tpr_train, label='ROC Curve (AUC = {:.2f})'.format(auc_train), color='blue')
+    axs[0, 0].plot([0, 1], [0, 1], linestyle='--', color='blue')
+    axs[0, 0].set_xlabel('False Positive Rate', fontsize=10)
+    axs[0, 0].set_ylabel('True Positive Rate', fontsize=10)
+    axs[0, 0].set_title(f'ROC Curve - Training Set - {classificador}', fontsize=10)
+    axs[0, 0].legend()
 
     # Test set ROC curve
-    axs[1].plot(fpr_test, tpr_test, label='ROC Curve (AUC = {:.2f})'.format(auc_test), color='blue')
-    axs[1].plot([0, 1], [0, 1], linestyle='--', color='gray')
-    axs[1].set_xlabel('False Positive Rate')
-    axs[1].set_ylabel('True Positive Rate')
-    axs[1].set_title(f'ROC Curve - Test Set - {classificador}')
-    axs[1].legend()
+    axs[1, 0].plot(fpr_test, tpr_test, label='ROC Curve (AUC = {:.2f})'.format(auc_test), color='blue')
+    axs[1, 0].plot([0, 1], [0, 1], linestyle='--', color='red')
+    axs[1, 0].set_xlabel('False Positive Rate', fontsize=10)
+    axs[1, 0].set_ylabel('True Positive Rate', fontsize=10)
+    axs[1, 0].set_title(f'ROC Curve - Test Set - {classificador}', fontsize=10)
+    axs[1, 0].legend()
 
+    # Training set Precision-Recall curve
+    axs[0, 1].plot(recall_train, precision_train, label='Precision-Recall Curve', color='blue')
+    axs[0, 1].set_xlabel('Recall', fontsize=10)
+    axs[0, 1].set_ylabel('Precision', fontsize=10)
+    axs[0, 1].set_title(f'Precision-Recall Curve - Training Set - {classificador}', fontsize=10)
+    axs[0, 1].legend()
+
+    # Test set Precision-Recall curve
+    axs[1, 1].plot(recall_test, precision_test, label='Precision-Recall Curve', color='red')
+    axs[1, 1].set_xlabel('Recall', fontsize=10)
+    axs[1, 1].set_ylabel('Precision', fontsize=10)
+    axs[1, 1].set_title(f'Precision-Recall Curve - Test Set - {classificador}', fontsize=10)
+    axs[1, 1].legend()
+
+    # Train set KS curve
+    axs[0, 2].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], label='Positive Class (Class 1)', color='blue')
+    axs[0, 2].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Bad'], label='Negative Class (Class 0)', color='blue')
+    axs[0, 2].plot([x_max_ks_train, x_max_ks_train], [0.38, y_max_ks_train], color='gray', linestyle='--')
+    axs[0, 2].fill_between(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], results_train_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[0, 2].text(x=results_train_sorted['Cumulative Perc Population'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])],
+                y=(0.38 + results_train_sorted['Cumulative Perc Good'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS_train), fontsize=12, color='blue', ha='left', va='center', rotation=45)
+    axs[0, 2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
+    axs[0, 2].set_ylabel('Cumulative Percentage', fontsize=10)
+    axs[0, 2].set_title(f'KS Plot - Training Set = {classificador}', fontsize=10)
+    axs[0, 2].legend()
+
+    # Test set KS curve
+    axs[1, 2].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], label='Positive Class (Class 1)', color='red')
+    axs[1, 2].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Bad'], label='Negative Class (Class 0)', color='red')
+    axs[1, 2].plot([x_max_ks_test, x_max_ks_test], [0.38, y_max_ks_test], color='gray', linestyle='--')
+    axs[1, 2].fill_between(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], results_test_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[1, 2].text(x=results_test_sorted['Cumulative Perc Population'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])],
+                y=(0.38 + results_test_sorted['Cumulative Perc Good'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS_test), fontsize=12, color='red', ha='left', va='center', rotation=45)
+    axs[1, 2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
+    axs[1, 2].set_ylabel('Cumulative Percentage', fontsize=10)
+    axs[1, 2].set_title(f'KS Plot - Test Set = {classificador}', fontsize=10)
+    axs[1, 2].legend()
+
+    plt.tight_layout()
     plt.show()
 
-from sklearn.metrics import precision_recall_curve, average_precision_score
-
-def precision_recall_graph(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
+def auc_precision_recall_ks_juntos(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
 
     predict_proba_train = pd.DataFrame(y_predict_proba_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
     predict_proba_test = pd.DataFrame(y_predict_proba_test.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
@@ -652,41 +733,122 @@ def precision_recall_graph(classificador, target, y_train, y_predict_train, y_te
     results_train['predict_proba_0'] = list(predict_proba_train['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
     results_train['predict_proba_1'] = list(predict_proba_train['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
 
+    results_train_sorted = results_train.sort_values(by='predict_proba_1', ascending=False)
+    results_train_sorted['Cumulative N Population'] = range(1, results_train_sorted.shape[0] + 1)
+    results_train_sorted['Cumulative N Good'] = results_train_sorted[target].cumsum()
+    results_train_sorted['Cumulative N Bad'] = results_train_sorted['Cumulative N Population'] - results_train_sorted['Cumulative N Good']
+    results_train_sorted['Cumulative Perc Population'] = results_train_sorted['Cumulative N Population'] / results_train_sorted.shape[0]
+    results_train_sorted['Cumulative Perc Good'] = results_train_sorted['Cumulative N Good'] / results_train_sorted[target].sum()
+    results_train_sorted['Cumulative Perc Bad'] = results_train_sorted['Cumulative N Bad'] / (results_train_sorted.shape[0] - results_train_sorted[target].sum())
+
+    max_ks_index_train = np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])
+    x_max_ks_train = results_train_sorted['Cumulative Perc Population'].iloc[max_ks_index_train]
+    y_max_ks_train = results_train_sorted['Cumulative Perc Good'].iloc[max_ks_index_train]
+
     results_test = y_test[[target]].copy()
     results_test['y_predict_test'] = y_predict_test
     results_test['predict_proba_0'] = list(predict_proba_test['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
     results_test['predict_proba_1'] = list(predict_proba_test['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
 
-    # Calculate Precision-Recall curve and AUC for the training set
+    results_test_sorted = results_test.sort_values(by='predict_proba_1', ascending=False)
+    results_test_sorted['Cumulative N Population'] = range(1, results_test_sorted.shape[0] + 1)
+    results_test_sorted['Cumulative N Good'] = results_test_sorted[target].cumsum()
+    results_test_sorted['Cumulative N Bad'] = results_test_sorted['Cumulative N Population'] - results_test_sorted['Cumulative N Good']
+    results_test_sorted['Cumulative Perc Population'] = results_test_sorted['Cumulative N Population'] / results_test_sorted.shape[0]
+    results_test_sorted['Cumulative Perc Good'] = results_test_sorted['Cumulative N Good'] / results_test_sorted[target].sum()
+    results_test_sorted['Cumulative Perc Bad'] = results_test_sorted['Cumulative N Bad'] / (results_test_sorted.shape[0] - results_test_sorted[target].sum())
+
+    max_ks_index_test = np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])
+    x_max_ks_test = results_test_sorted['Cumulative Perc Population'].iloc[max_ks_index_test]
+    y_max_ks_test = results_test_sorted['Cumulative Perc Good'].iloc[max_ks_index_test]
+
+    # Calculate AUC and ROC for the training set
+    y_true_train = results_train[target]
+    y_scores_train = results_train['predict_proba_1']
+    auc_train = roc_auc_score(y_true_train, y_scores_train)
+    fpr_train, tpr_train, thresholds_train = roc_curve(y_true_train, y_scores_train)
+
+    # Calculate AUC and ROC for the test set
+    y_true_test = results_test[target]
+    y_scores_test = results_test['predict_proba_1']
+    auc_test = roc_auc_score(y_true_test, y_scores_test)
+    fpr_test, tpr_test, thresholds_test = roc_curve(y_true_test, y_scores_test)
+
+    # Calculate Precision-Recall curve for the training set
     y_true_train = results_train[target]
     y_scores_train = results_train['predict_proba_1']
     precision_train, recall_train, _ = precision_recall_curve(y_true_train, y_scores_train)
     average_precision_train = average_precision_score(y_true_train, y_scores_train)
 
-    # Calculate Precision-Recall curve and AUC for the test set
+    # Calculate Precision-Recall curve for the test set
     y_true_test = results_test[target]
     y_scores_test = results_test['predict_proba_1']
     precision_test, recall_test, _ = precision_recall_curve(y_true_test, y_scores_test)
     average_precision_test = average_precision_score(y_true_test, y_scores_test)
+    
+    # Calculate KS curve for the training set
+    KS_test = round(np.max(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad']), 2)
 
-    # Plot Precision-Recall curves side by side
-    fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+    # Calculate KS curve for the test set
+    KS_train = round(np.max(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad']), 2)
 
-    # Training set Precision-Recall curve
-    axs[0].plot(recall_train, precision_train, label='Precision-Recall Curve', color='green')
-    axs[0].set_xlabel('Recall')
-    axs[0].set_ylabel('Precision')
-    axs[0].set_title(f'Precision-Recall Curve - Training Set - {classificador}')
+    # Plot ROC and Precision-Recall curves side by side
+    fig, axs = plt.subplots(1, 3, figsize=(18, 7))
+
+    # Training set ROC curve
+    axs[0].plot(fpr_train, tpr_train, label='Train ROC Curve (AUC = {:.2f})'.format(auc_train), color='blue')
+    axs[0].plot([0, 1], [0, 1], linestyle='--', color='gray')
+    axs[0].set_xlabel('False Positive Rate', fontsize=10)
+    axs[0].set_ylabel('True Positive Rate', fontsize=10)
+    axs[0].set_title(f'ROC Curve - {classificador}', fontsize=10)
     axs[0].legend()
 
-    # Test set Precision-Recall curve
-    axs[1].plot(recall_test, precision_test, label='Precision-Recall Curve ', color='green')
-    axs[1].set_xlabel('Recall')
-    axs[1].set_ylabel('Precision')
-    axs[1].set_title(f'Precision-Recall Curve - Test Set - {classificador}')
+    # Test set ROC curve
+    axs[0].plot(fpr_test, tpr_test, label='Test ROC Curve (AUC = {:.2f})'.format(auc_test), color='red')
+    axs[0].legend()
+
+    # Training set Precision-Recall curve
+    axs[1].plot(recall_train, precision_train, label='Train Precision-Recall Curve', color='blue')
+    axs[1].set_xlabel('Recall', fontsize=10)
+    axs[1].set_ylabel('Precision', fontsize=10)
+    axs[1].set_title(f'Precision-Recall Curve - {classificador}', fontsize=10)
     axs[1].legend()
 
+    # Test set Precision-Recall curve
+    axs[1].plot(recall_test, precision_test, label='Test Precision-Recall Curve', color='red')
+    axs[1].legend()
+
+    # Train set KS curve
+    axs[2].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], label='Train Positive Class (Class 1)', color='blue')
+    axs[2].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Bad'], label='Train Negative Class (Class 0)', color='blue')
+    axs[2].plot([x_max_ks_train, x_max_ks_train], [0.38, y_max_ks_train], color='gray', linestyle='--')
+    axs[2].fill_between(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], results_train_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[2].text(x=results_train_sorted['Cumulative Perc Population'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])],
+                y=(0.38 + results_train_sorted['Cumulative Perc Good'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS_train), fontsize=12, color='blue', ha='left', va='center', rotation=45)
+    axs[2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
+    axs[2].set_ylabel('Cumulative Percentage', fontsize=10)
+    axs[2].set_title(f'KS Plot - {classificador}', fontsize=10)
+    axs[2].legend()
+
+    # Test set KS curve
+    axs[2].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], label='Test Positive Class (Class 1)', color='red')
+    axs[2].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Bad'], label='Test Negative Class (Class 0)', color='red')
+    axs[2].plot([x_max_ks_test, x_max_ks_test], [0.38, y_max_ks_test], color='gray', linestyle='--')
+    axs[2].fill_between(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], results_test_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[2].text(x=results_test_sorted['Cumulative Perc Population'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])],
+                y=(0.30 + results_test_sorted['Cumulative Perc Good'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS_test), fontsize=12, color='red', ha='left', va='center', rotation=45)
+    axs[2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
+    axs[2].set_ylabel('Cumulative Percentage', fontsize=10)
+    axs[2].set_title(f'KS Plot - {classificador}', fontsize=10)
+    axs[2].legend()
+
+    plt.tight_layout()
     plt.show()
+
+
+
 
 
 def verifica_tipo_variavel(df):
@@ -801,16 +963,18 @@ def remove_features_feature_importance(target, df, class_weight, threshold):
     # Obter as importâncias das features
     feature_importances = model.feature_importances_
 
-    # Cria o DF
-
     # Selecionar as features com importância maior que zero
-
     selected_features = list(x.columns[feature_importances > threshold])
     selected_features.append(target)
 
-    feature_importance = [importance for importance in feature_importances if importance > threshold]
+    feature_importance_df = pd.DataFrame({
+        'feature': x.columns,
+        'importance': feature_importances
+    }).sort_values(by = 'importance', ascending = False)
+    feature_importance_df = feature_importance_df.loc[feature_importance_df['importance'] > 0]
+    feature_importance_df['importance'] = feature_importance_df['importance']*100
 
-    return selected_features, feature_importance
+    return selected_features, feature_importance_df
 
 
 
@@ -866,7 +1030,7 @@ def teste_hipotese_duas_variaveis_categoricas(df, variavel1, variavel2):
     else:
         print(f'Pelo Teste Qui-Quadrado, há associação significativa entre {variavel1} e {variavel2}.')
 
-def ks(y_proba_0, y_proba_1):
+def ks_test(y_proba_0, y_proba_1):
     KS, p_value = stats.ks_2samp(y_proba_0, y_proba_1)
 
     if p_value > 0.05:
@@ -956,18 +1120,14 @@ def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_pr
     accuracy_train = accuracy_score(y_train, y_predict_train)
     precision_train = precision_score(y_train, y_predict_train)
     recall_train = recall_score(y_train, y_predict_train)
-    #roc_auc_train = roc_auc_score(y_train, y_predict_train)
-    
-    #metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'AUC': roc_auc_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
-    metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
+    f1_train = f1_score(y_train, y_predict_train)
+    metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'F1-Score' : f1_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
     
     accuracy_test = accuracy_score(y_test, y_predict_test)
     precision_test = precision_score(y_test, y_predict_test)
     recall_test = recall_score(y_test, y_predict_test)
-    #roc_auc_test = roc_auc_score(y_test, y_predict_test)
-    
-    #metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'AUC': roc_auc_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
-    metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
+    f1_test = f1_score(y_test, y_predict_test)
+    metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'F1-Score' : f1_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
     
     metricas_finais = pd.concat([metricas_treino, metricas_teste])
 
@@ -975,64 +1135,6 @@ def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_pr
 
 def metricas_classificacao_modelos_juntos(lista_modelos):
     metricas_modelos = pd.concat(lista_modelos).set_index('Classificador')
-    return metricas_modelos
-
-def validacao_cruzada_classificacao(classificador, x_train, y_train, class_weight, n_splits):
-
-    qualitativas_numericas = [column for column in x_train.columns if x_train[column].nunique() <= 5]
-    discretas = [column for column in x_train.columns if (x_train[column].nunique() > 5) and (x_train[column].nunique() <= 50)]
-    continuas = [column for column in x_train.columns if x_train[column].nunique() > 50]
-
-    kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    models = {
-        'Regressão Logística': make_pipeline(
-            ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
-                ]),
-            LogisticRegression(random_state=42, class_weight={0:1, 1:class_weight}, solver = 'liblinear')
-        ),
-        'Random Forest': make_pipeline(
-            ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
-                ]),
-            RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, max_depth=4, class_weight={0:1, 1:class_weight})
-        ),
-        'XGBoost': make_pipeline(
-            ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
-                ]),
-            XGBClassifier(random_state=42, n_estimators=20, max_depth=5, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight = class_weight)
-        )
-    }
-
-    if classificador in models:
-        model = models[classificador]
-    else:
-        print('Utilize Regressão Logística, Random Forest ou XGBoost como opções de Classificadores!')
-    
-    scoring = ['accuracy', 'precision', 'recall', 'roc_auc']
-    scores = cross_validate(model, x_train, y_train, cv=kfold, scoring=scoring, return_train_score=False)
-    
-    metricas_finais = pd.DataFrame({
-        'Acuracia': scores['test_accuracy'].mean(),
-        'Precisao': scores['test_precision'].mean(),
-        'Recall': scores['test_recall'].mean(),
-        'AUC':scores['test_roc_auc'].mean(),
-        'Etapa': 'validacao_cruzada',
-        'Classificador': classificador
-    }, index=[1])
-    
-    return metricas_finais
-
-
-def metricas_regressao_modelos_juntos(lista_modelos):
-    metricas_modelos = pd.concat(lista_modelos).set_index('Regressor')
     return metricas_modelos
 
 def retorno_financeiro(target, y_true, y_predict):
@@ -1102,8 +1204,25 @@ def transform_to_percentiles(df, variavel_continua):
     
     return percentiles
 
+def simple_imputer(df):
+
+    df_aux = df.copy()
+    imputer = SimpleImputer(strategy = 'median')
+    imputer.fit(df_aux)
+
+    return imputer
+
 
 def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight):
+
+    def simple_imputer(df):
+
+        df_aux = df.copy()
+        imputer = SimpleImputer(strategy = 'median')
+        imputer.fit(df_aux)
+
+        return imputer
+    
     cols = list(x_train.columns)
     imputer = simple_imputer(x_train)
     x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
@@ -1122,13 +1241,13 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
             ColumnTransformer([
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
             ]),
-            RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, max_depth=4, class_weight={0:1, 1:class_weight})
+            RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, max_depth=9, class_weight={0:1, 1:class_weight})
         ),
         'XGBoost': make_pipeline(
             ColumnTransformer([
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
             ]),
-            XGBClassifier(random_state=42, n_estimators=20, max_depth=5, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight=class_weight)
+            XGBClassifier(random_state=42, n_estimators=20, max_depth=9, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight=class_weight)
         )
     }
 
@@ -1146,19 +1265,272 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
 
     return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test
 
+def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, class_weight):
+
+    def numero_de_anos_emprego_atual(df):
+        df['emp_length'] = (df['emp_length'].replace({'< 1 year':0, '1 year':1, '2 years':2, '3 years':3, '4 years':4, '5 years':5, '6 years':6, '7 years':7, '8 years':8, '9 years':9,'10+ years':10}).fillna(0))
+        df['emp_length'] = df['emp_length'].apply(lambda x:int(x))
+        df['emp_length'] = np.where(df['emp_length'] <= 3, '3_YEARS', 
+                            np.where(df['emp_length'] <= 6, '6_YEARS',
+                            np.where(df['emp_length'] <= 9, '9_YEARS',
+                            '10_YEARS+')))
+        return df['emp_length']
+
+    def numero_de_registros_negativos(df):
+
+        df = df[['loan_status', 'pub_rec']].copy()
+        df[['pub_rec']] = np.where(df[['pub_rec']] == 0, 'sem_registros_negativos', 'com_registros_negativos')
+
+        return df['pub_rec']
+
+    def consulta_de_credito_nos_ultimos_6_meses(df):
+        df = df[['loan_status', 'inq_last_6mths']].copy()
+        df[['inq_last_6mths']] = np.where(df[['inq_last_6mths']] == 0, 'sem_consultas', 'com_consultas')
+
+        return df['inq_last_6mths']
+
+    def compromento_de_renda(df): 
+        df_aux = df[['annual_inc', 'installment', 'loan_amnt', 'term', 'int_rate', 'loan_status']].copy()
+        df_aux['term'] = np.where(df_aux['term'] == ' 36 months', 36, 60)
+        df_aux['loan_amnt_with_int_rate'] = df_aux['installment']*df_aux['term']
+        df_aux['annual_payment'] = np.where(df_aux['term'] == ' 36 months', df_aux['loan_amnt_with_int_rate']/3, df_aux['loan_amnt_with_int_rate']/5)
+        df_aux['annual_income_commitment_rate'] = ((df_aux['annual_payment']/df_aux['annual_inc'])*100).round(2)
+        
+        return df_aux['annual_income_commitment_rate']
+
+    def n_meses_produto_credito_atual(df):
+        df = df.copy()
+        df['issue_d'] = pd.to_datetime(df['issue_d'], format = '%b-%y')
+        df['mths_since_issue_d'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['issue_d'])/np.timedelta64(1, 'M')))
+        df['mths_since_issue_d'] = df['mths_since_issue_d'].fillna(df['mths_since_issue_d'].median())
+        df['mths_since_issue_d'] = np.where(df['mths_since_issue_d'] < 0, df['mths_since_issue_d'].median(), df['mths_since_issue_d'])
+        df['mths_since_issue_d'] = df['mths_since_issue_d'].apply(lambda x:int(x))
+        df['issue_d'] = df['mths_since_issue_d']
+
+        return df['issue_d']
+
+    def n_meses_primeiro_produto_credito(df):
+        df = df.copy()
+        df['earliest_cr_line'] = pd.to_datetime(df['earliest_cr_line'], format = '%b-%y')
+        df['mths_since_earliest_cr_line'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['earliest_cr_line'])/np.timedelta64(1, 'M')))
+        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].fillna(df['mths_since_earliest_cr_line'].median())
+        df['mths_since_earliest_cr_line'] = np.where(df['mths_since_earliest_cr_line'] < 0, df['mths_since_earliest_cr_line'].median(), df['mths_since_earliest_cr_line'])
+        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].apply(lambda x:int(x))
+        df['earliest_cr_line'] = df['mths_since_earliest_cr_line']
+        
+        return df['earliest_cr_line']
+
+    def formato_features_binarias(df):
+        df['term'] = np.where(df['term'] == ' 36 months', 0, 1)
+        df['delinq_2yrs'] = np.where(df['delinq_2yrs'] == 'sem_inadimplencia_vencida', 0, 1)
+        df['initial_list_status'] = np.where(df['initial_list_status'] == 'f', 0, 1)
+        df['pymnt_plan'] = np.where(df['pymnt_plan'] == 'n', 0, 1)
+        df['verification_status'] = np.where(df['verification_status'] == 'Source Verified', 0, 1)
+        df['inq_last_6mths'] = np.where(df['inq_last_6mths'] == 'com_consultas', 0, 1)
+
+        return df
+
+    def taxa_de_bad_por_categoria(df, tipo):
+        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
+        df_aux_2 = df.copy()
+        if tipo == 'Criação':
+            for cat in categoricas:
+                df_aux = df[[f'{cat}', 'loan_status']].copy()
+                good = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 0].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_good'}, axis = 1)
+                bad = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 1].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_bad'}, axis = 1)
+                df_aux = good.merge(bad, on = f'{cat}', how = 'left')
+                df_aux['qt_total'] = df_aux['qt_good'] + df_aux['qt_bad']
+                df_aux[f'bad_rate_{cat}'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
+                df_aux[f'bad_rate_{cat}'] = df_aux[f'bad_rate_{cat}'].apply(lambda x:float(x))
+                df_aux = df_aux[[f'{cat}', f'bad_rate_{cat}']].drop_duplicates().sort_values(by = f'bad_rate_{cat}', ascending = True)
+                df_aux.to_csv(f'features/bad_rate_{cat}.csv', index = False)
+                df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'bad_rate_{cat}']], on = f'{cat}', how = 'left')
+        else:
+            for cat in categoricas:
+                ft = pd.read_csv(f'features/bad_rate_{cat}.csv')
+                replace_dict = dict(zip(ft[f'{cat}'], ft[f'bad_rate_{cat}']))
+                df_aux_2[f'bad_rate_{cat}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+
+        return df_aux_2
+
+    def media_categoria_variavel_quantitativa(df, tipo):
+        df_aux_2 = df.copy()
+        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'delinq_2yrs', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
+        quantitativas = ['loan_amnt', 'int_rate', 'annual_inc', 'annual_income_commitment_rate', 'tot_cur_bal', 'total_rev_hi_lim', 'revol_util', 'open_acc', 'total_acc']
+        if tipo == 'Criação':
+            for cat in categoricas:
+                for quant in quantitativas:
+                    df_aux = df[[f'{cat}', f'{quant}']].copy()
+                    df_aux = pd.DataFrame(df_aux.groupby(f'{cat}', as_index = False)[f'{quant}'].mean()).rename({f'{quant}':f'mean_{cat}_{quant}'}, axis = 1)
+                    df_aux[f'mean_{cat}_{quant}'] = df_aux[f'mean_{cat}_{quant}'].apply(lambda x:float(x))
+                    df_aux[[f'{cat}', f'mean_{cat}_{quant}']].drop_duplicates().sort_values(by = f'mean_{cat}_{quant}', ascending = True)
+                    df_aux.to_csv(f'features/mean_{cat}_{quant}.csv', index = False)
+                    df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'mean_{cat}_{quant}']], on = f'{cat}', how = 'left')
+        else:
+            for cat in categoricas:
+                for quant in quantitativas:
+                    ft = pd.read_csv(f'features/mean_{cat}_{quant}.csv')
+                    replace_dict = dict(zip(ft[f'{cat}'], ft[f'mean_{cat}_{quant}']))
+                    df_aux_2[f'mean_{cat}_{quant}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+
+        return df_aux_2
+
+
+    def simple_imputer(df):
+
+        df_aux = df.copy()
+        imputer = SimpleImputer(strategy = 'median')
+        imputer.fit(df_aux)
+
+        return imputer
+
+    columns_selected = ['loan_status', 'term','grade','sub_grade','purpose', 'delinq_2yrs', 'loan_amnt','int_rate','issue_d','policy_code','pymnt_plan','initial_list_status','installment','emp_length','home_ownership',
+    'verification_status','annual_inc','addr_state', 'tot_cur_bal','total_rev_hi_lim','revol_bal','revol_util','open_acc','total_acc','pub_rec','inq_last_6mths','earliest_cr_line','mths_since_last_record', 'mths_since_last_major_derog',
+    'mths_since_last_delinq']
+
+    df_raw = df[columns_selected].copy()
+
+    # Feature Selection
+
+    features_selected = pd.read_csv('features/features_selected.csv')
+    features_selected = features_selected.loc[features_selected['importance'] > 1] 
+    features_selected = list(features_selected['feature'].unique()) + ['loan_status']
+
+    # Inicializar o KFold para dividir os dados
+    kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+    # Listas para armazenar as métricas para cada fold
+    accuracy_scores = []
+    precision_scores = []
+    recall_scores = []
+    f1_scores = []
+
+    # Loop pelos folds
+    for train_idx, test_idx in kfold.split(df_raw):
+        # Criar DataFrames de treino e teste
+        df_train = df_raw.iloc[train_idx]
+        df_test = df_raw.iloc[test_idx]
+
+        # Criação das Features sem Data Leakage
+        df_train['emp_length'] = numero_de_anos_emprego_atual(df_train)
+        df_train['pub_rec'] = numero_de_registros_negativos(df_train)
+        df_train['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_train)
+        df_train['annual_income_commitment_rate'] = compromento_de_renda(df_train)
+        df_train['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_train)
+        df_train['issue_d'] = n_meses_produto_credito_atual(df_train)
+        df_train['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_train)
+        df_train = formato_features_binarias(df_train)
+        df_train = taxa_de_bad_por_categoria(df_train, 'escoragem')
+        df_train = media_categoria_variavel_quantitativa(df_train, 'escoragem')
+
+        df_test['emp_length'] = numero_de_anos_emprego_atual(df_test)
+        df_test['pub_rec'] = numero_de_registros_negativos(df_test)
+        df_test['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_test)
+        df_test['annual_income_commitment_rate'] = compromento_de_renda(df_test)
+        df_test['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_test)
+        df_test['issue_d'] = n_meses_produto_credito_atual(df_test)
+        df_test['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_test)
+        df_test = formato_features_binarias(df_test)
+        df_test = taxa_de_bad_por_categoria(df_test, 'escoragem')
+        df_test = media_categoria_variavel_quantitativa(df_test, 'escoragem')
+
+        # Filtragem das Features que passaram no Feature Selection
+        df_train = df_train[features_selected]
+        df_test = df_test[features_selected]
+
+        # Separação Feature e Target
+        x_train, y_train = separa_feature_target('loan_status', df_train)
+        x_test, y_test = separa_feature_target('loan_status', df_test)
+        
+        # Imputer
+        cols = list(x_train.columns)
+        imputer = simple_imputer(x_train)
+        x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
+        x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
+
+        # Define as colunas categóricas e numéricas
+        models = {
+            'Regressão Logística': make_pipeline(
+                ColumnTransformer([
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+                    ('scaler', make_pipeline(MinMaxScaler()), cols)
+                ]),
+                LogisticRegression(random_state=42, class_weight={0:1, 1:class_weight}, solver='liblinear')
+            ),
+            'Random Forest': make_pipeline(
+                ColumnTransformer([
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
+                ]),
+                RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, max_depth=9, class_weight={0:1, 1:class_weight})
+            ),
+            'XGBoost': make_pipeline(
+                ColumnTransformer([
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
+                ]),
+                XGBClassifier(random_state=42, n_estimators=20, max_depth=9, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight=class_weight)
+            )
+        }
+
+        if classificador in models:
+            model = models[classificador]
+        else:
+            print('Utilize Regressão Logística, Random Forest ou XGBoost como opções de Classificadores!')
+
+        # Treinar o modelo usando os dados de treinamento
+        model.fit(x_train, y_train)
+
+        # Fazer as previsões usando o modelo nos dados de teste
+        y_pred = model.predict(x_test)
+
+        # Calcular as métricas
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred)
+        recall = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+
+        accuracy_scores.append(accuracy)
+        precision_scores.append(precision)
+        recall_scores.append(recall)
+        f1_scores.append(f1)
+
+    # Calcular a média das métricas para todos os folds
+    mean_accuracy = np.mean(accuracy_scores)
+    mean_precision = np.mean(precision_scores)
+    mean_recall = np.mean(recall_scores)
+    mean_f1 = np.mean(f1_scores)
+
+    # Criar um DataFrame com as métricas
+    metricas_finais = pd.DataFrame({
+        'Acuracia': mean_accuracy,
+        'Precisao': mean_precision,
+        'Recall': mean_recall,
+        'F1-Score': mean_f1,
+        'Etapa': 'validacao_cruzada',
+        'Classificador': classificador
+    }, index=[1])
+
+    return metricas_finais
+
 
 def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
-    # Define as colunas categóricas e numéricas
-    qualitativas_numericas = [column for column in x_train.columns if x_train[column].nunique() <= 5]
-    discretas = [column for column in x_train.columns if (x_train[column].nunique() > 5) and (x_train[column].nunique() <= 50)]
-    continuas = [column for column in x_train.columns if x_train[column].nunique() > 50]
+    def simple_imputer(df):
+
+        df_aux = df.copy()
+        imputer = SimpleImputer(strategy = 'median')
+        imputer.fit(df_aux)
+
+        return imputer
+    
+    cols = list(x_train.columns)
+    imputer = simple_imputer(x_train)
+    x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
+    x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
 
     # Define o ColumnTransformer
     preprocessor = ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
-    ])
+                ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+                ('scaler', make_pipeline(MinMaxScaler()), cols)
+            ])
 
     # Define o modelo de XGBoost com a otimização de hiperparâmetros via BayesSearch
     model = make_pipeline(
@@ -1167,19 +1539,20 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
             XGBClassifier(random_state=42, eval_metric='logloss', objective='binary:logistic'),
             {
                 'n_estimators': (10, 15, 20, 50), # Número de Árvores construídas
-                'max_depth': (4, 5, 7), # Profundidade Máxima de cada Árvore
+                'max_depth': (4, 5, 7, 8, 9, 10), # Profundidade Máxima de cada Árvore
                 'learning_rate': (0.01, 0.05), # Tamanho do passo utilizado no Método do Gradiente Descendente
                 'reg_alpha':(0.5, 1), # Valor do Alpha aplicado durante a Regularização Lasso L1 
                 'reg_lambda':(0.5, 1), # Valor do Lambda aplicado durante a Regularização Ridge L2
                 'gamma':(0.5, 1), # Valor mínimo permitido para um Nó de Árvore ser aceito. Ajuda a controlar o crescimento das Árvores, evitando divisões insignificantes
                 'colsample_bytree':(0.5, 1), # Porcentagem de Colunas utilizada para a amostragem aleatória durante a criação das Árvores
                 'subsample':(0.5, 1), # Porcentagem de Linhas utilizada para a amostragem aleatória durante a criação das Árvores
-                'scale_pos_weight':(8, 10, 12, 14) # Peso atribuído a classe positiva, aumentando a importância da classe minoritária
+                'scale_pos_weight':(3, 5, 8, 10, 12, 14), # Peso atribuído a classe positiva, aumentando a importância da classe minoritária
+                'base_score':(0.30, 0.40, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90)
             },
             n_iter=10,
             random_state=42,
             n_jobs=-1,
-            scoring='precision',
+            scoring='roc_auc',
             cv=5
         )
     )
@@ -1194,6 +1567,7 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
     y_proba_test = model.predict_proba(x_test)
 
     return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, model.named_steps['bayessearchcv'].best_params_
+
 
 
 def modelo_corte_probabilidade(classificador, x_train, y_train, x_test, y_test, target):
