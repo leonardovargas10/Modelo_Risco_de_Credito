@@ -592,11 +592,17 @@ def plota_dispersao(df, titulo,  x, y, metodo):
     plt.tight_layout()
     plt.show()
 
-def auc_precision_recall_ks(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
+def auc_precision_recall_ks_juntos(classificador, target, 
+                                    y_train, y_predict_train, 
+                                    y_test, y_predict_test, 
+                                    y_predict_proba_train, y_predict_proba_test, 
+                                    y_validacao_cruzada, y_predict_validacao_cruzada, y_predict_proba_validacao_cruzada):
 
     predict_proba_train = pd.DataFrame(y_predict_proba_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
     predict_proba_test = pd.DataFrame(y_predict_proba_test.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_validacao_cruzada = pd.DataFrame(y_predict_proba_validacao_cruzada.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
 
+    ### Treino
     results_train = y_train[[target]].copy()
     results_train['y_predict_train'] = y_predict_train
     results_train['predict_proba_0'] = list(predict_proba_train['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
@@ -614,6 +620,7 @@ def auc_precision_recall_ks(classificador, target, y_train, y_predict_train, y_t
     x_max_ks_train = results_train_sorted['Cumulative Perc Population'].iloc[max_ks_index_train]
     y_max_ks_train = results_train_sorted['Cumulative Perc Good'].iloc[max_ks_index_train]
 
+    ### Teste
     results_test = y_test[[target]].copy()
     results_test['y_predict_test'] = y_predict_test
     results_test['predict_proba_0'] = list(predict_proba_test['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
@@ -631,136 +638,23 @@ def auc_precision_recall_ks(classificador, target, y_train, y_predict_train, y_t
     x_max_ks_test = results_test_sorted['Cumulative Perc Population'].iloc[max_ks_index_test]
     y_max_ks_test = results_test_sorted['Cumulative Perc Good'].iloc[max_ks_index_test]
 
-    # Calculate AUC and ROC for the training set
-    y_true_train = results_train[target]
-    y_scores_train = results_train['predict_proba_1']
-    auc_train = roc_auc_score(y_true_train, y_scores_train)
-    fpr_train, tpr_train, thresholds_train = roc_curve(y_true_train, y_scores_train)
+    ### Validação Cruzada
+    results_validacao_cruzada = y_validacao_cruzada[[target]].copy() # y_validacao_cruzada
+    results_validacao_cruzada['y_predict_validacao_cruzada'] = y_predict_validacao_cruzada
+    results_validacao_cruzada['predict_proba_0'] = list(predict_proba_validacao_cruzada['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results_validacao_cruzada['predict_proba_1'] = list(predict_proba_validacao_cruzada['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
 
-    # Calculate AUC and ROC for the test set
-    y_true_test = results_test[target]
-    y_scores_test = results_test['predict_proba_1']
-    auc_test = roc_auc_score(y_true_test, y_scores_test)
-    fpr_test, tpr_test, thresholds_test = roc_curve(y_true_test, y_scores_test)
+    results_validacao_cruzada_sorted = results_validacao_cruzada.sort_values(by='predict_proba_1', ascending=False)
+    results_validacao_cruzada_sorted['Cumulative N Population'] = range(1, results_validacao_cruzada_sorted.shape[0] + 1)
+    results_validacao_cruzada_sorted['Cumulative N Good'] = results_validacao_cruzada_sorted[target].cumsum()
+    results_validacao_cruzada_sorted['Cumulative N Bad'] = results_validacao_cruzada_sorted['Cumulative N Population'] - results_validacao_cruzada_sorted['Cumulative N Good']
+    results_validacao_cruzada_sorted['Cumulative Perc Population'] = results_validacao_cruzada_sorted['Cumulative N Population'] / results_validacao_cruzada_sorted.shape[0]
+    results_validacao_cruzada_sorted['Cumulative Perc Good'] = results_validacao_cruzada_sorted['Cumulative N Good'] / results_validacao_cruzada_sorted[target].sum()
+    results_validacao_cruzada_sorted['Cumulative Perc Bad'] = results_validacao_cruzada_sorted['Cumulative N Bad'] / (results_validacao_cruzada_sorted.shape[0] - results_validacao_cruzada_sorted[target].sum())
 
-    # Calculate Precision-Recall curve for the training set
-    y_true_train = results_train[target]
-    y_scores_train = results_train['predict_proba_1']
-    precision_train, recall_train, _ = precision_recall_curve(y_true_train, y_scores_train)
-    average_precision_train = average_precision_score(y_true_train, y_scores_train)
-
-    # Calculate Precision-Recall curve for the test set
-    y_true_test = results_test[target]
-    y_scores_test = results_test['predict_proba_1']
-    precision_test, recall_test, _ = precision_recall_curve(y_true_test, y_scores_test)
-    average_precision_test = average_precision_score(y_true_test, y_scores_test)
-    
-    # Calculate KS curve for the training set
-    KS_test = round(np.max(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad']), 2)
-
-    # Calculate KS curve for the test set
-    KS_train = round(np.max(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad']), 2)
-
-    # Plot ROC and Precision-Recall curves side by side
-    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
-
-    # Training set ROC curve
-    axs[0, 0].plot(fpr_train, tpr_train, label='ROC Curve (AUC = {:.2f})'.format(auc_train), color='blue')
-    axs[0, 0].plot([0, 1], [0, 1], linestyle='--', color='blue')
-    axs[0, 0].set_xlabel('False Positive Rate', fontsize=10)
-    axs[0, 0].set_ylabel('True Positive Rate', fontsize=10)
-    axs[0, 0].set_title(f'ROC Curve - Training Set - {classificador}', fontsize=10)
-    axs[0, 0].legend()
-
-    # Test set ROC curve
-    axs[1, 0].plot(fpr_test, tpr_test, label='ROC Curve (AUC = {:.2f})'.format(auc_test), color='blue')
-    axs[1, 0].plot([0, 1], [0, 1], linestyle='--', color='red')
-    axs[1, 0].set_xlabel('False Positive Rate', fontsize=10)
-    axs[1, 0].set_ylabel('True Positive Rate', fontsize=10)
-    axs[1, 0].set_title(f'ROC Curve - Test Set - {classificador}', fontsize=10)
-    axs[1, 0].legend()
-
-    # Training set Precision-Recall curve
-    axs[0, 1].plot(recall_train, precision_train, label='Precision-Recall Curve', color='blue')
-    axs[0, 1].set_xlabel('Recall', fontsize=10)
-    axs[0, 1].set_ylabel('Precision', fontsize=10)
-    axs[0, 1].set_title(f'Precision-Recall Curve - Training Set - {classificador}', fontsize=10)
-    axs[0, 1].legend()
-
-    # Test set Precision-Recall curve
-    axs[1, 1].plot(recall_test, precision_test, label='Precision-Recall Curve', color='red')
-    axs[1, 1].set_xlabel('Recall', fontsize=10)
-    axs[1, 1].set_ylabel('Precision', fontsize=10)
-    axs[1, 1].set_title(f'Precision-Recall Curve - Test Set - {classificador}', fontsize=10)
-    axs[1, 1].legend()
-
-    # Train set KS curve
-    axs[0, 2].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], label='Positive Class (Class 1)', color='blue')
-    axs[0, 2].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Bad'], label='Negative Class (Class 0)', color='blue')
-    axs[0, 2].plot([x_max_ks_train, x_max_ks_train], [0.38, y_max_ks_train], color='gray', linestyle='--')
-    axs[0, 2].fill_between(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], results_train_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
-    axs[0, 2].text(x=results_train_sorted['Cumulative Perc Population'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])],
-                y=(0.38 + results_train_sorted['Cumulative Perc Good'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])]) / 2,
-                s=str(KS_train), fontsize=12, color='blue', ha='left', va='center', rotation=45)
-    axs[0, 2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
-    axs[0, 2].set_ylabel('Cumulative Percentage', fontsize=10)
-    axs[0, 2].set_title(f'KS Plot - Training Set = {classificador}', fontsize=10)
-    axs[0, 2].legend()
-
-    # Test set KS curve
-    axs[1, 2].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], label='Positive Class (Class 1)', color='red')
-    axs[1, 2].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Bad'], label='Negative Class (Class 0)', color='red')
-    axs[1, 2].plot([x_max_ks_test, x_max_ks_test], [0.38, y_max_ks_test], color='gray', linestyle='--')
-    axs[1, 2].fill_between(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], results_test_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
-    axs[1, 2].text(x=results_test_sorted['Cumulative Perc Population'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])],
-                y=(0.38 + results_test_sorted['Cumulative Perc Good'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])]) / 2,
-                s=str(KS_test), fontsize=12, color='red', ha='left', va='center', rotation=45)
-    axs[1, 2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
-    axs[1, 2].set_ylabel('Cumulative Percentage', fontsize=10)
-    axs[1, 2].set_title(f'KS Plot - Test Set = {classificador}', fontsize=10)
-    axs[1, 2].legend()
-
-    plt.tight_layout()
-    plt.show()
-
-def auc_precision_recall_ks_juntos(classificador, target, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
-
-    predict_proba_train = pd.DataFrame(y_predict_proba_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
-    predict_proba_test = pd.DataFrame(y_predict_proba_test.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
-
-    results_train = y_train[[target]].copy()
-    results_train['y_predict_train'] = y_predict_train
-    results_train['predict_proba_0'] = list(predict_proba_train['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
-    results_train['predict_proba_1'] = list(predict_proba_train['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
-
-    results_train_sorted = results_train.sort_values(by='predict_proba_1', ascending=False)
-    results_train_sorted['Cumulative N Population'] = range(1, results_train_sorted.shape[0] + 1)
-    results_train_sorted['Cumulative N Good'] = results_train_sorted[target].cumsum()
-    results_train_sorted['Cumulative N Bad'] = results_train_sorted['Cumulative N Population'] - results_train_sorted['Cumulative N Good']
-    results_train_sorted['Cumulative Perc Population'] = results_train_sorted['Cumulative N Population'] / results_train_sorted.shape[0]
-    results_train_sorted['Cumulative Perc Good'] = results_train_sorted['Cumulative N Good'] / results_train_sorted[target].sum()
-    results_train_sorted['Cumulative Perc Bad'] = results_train_sorted['Cumulative N Bad'] / (results_train_sorted.shape[0] - results_train_sorted[target].sum())
-
-    max_ks_index_train = np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])
-    x_max_ks_train = results_train_sorted['Cumulative Perc Population'].iloc[max_ks_index_train]
-    y_max_ks_train = results_train_sorted['Cumulative Perc Good'].iloc[max_ks_index_train]
-
-    results_test = y_test[[target]].copy()
-    results_test['y_predict_test'] = y_predict_test
-    results_test['predict_proba_0'] = list(predict_proba_test['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
-    results_test['predict_proba_1'] = list(predict_proba_test['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
-
-    results_test_sorted = results_test.sort_values(by='predict_proba_1', ascending=False)
-    results_test_sorted['Cumulative N Population'] = range(1, results_test_sorted.shape[0] + 1)
-    results_test_sorted['Cumulative N Good'] = results_test_sorted[target].cumsum()
-    results_test_sorted['Cumulative N Bad'] = results_test_sorted['Cumulative N Population'] - results_test_sorted['Cumulative N Good']
-    results_test_sorted['Cumulative Perc Population'] = results_test_sorted['Cumulative N Population'] / results_test_sorted.shape[0]
-    results_test_sorted['Cumulative Perc Good'] = results_test_sorted['Cumulative N Good'] / results_test_sorted[target].sum()
-    results_test_sorted['Cumulative Perc Bad'] = results_test_sorted['Cumulative N Bad'] / (results_test_sorted.shape[0] - results_test_sorted[target].sum())
-
-    max_ks_index_test = np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])
-    x_max_ks_test = results_test_sorted['Cumulative Perc Population'].iloc[max_ks_index_test]
-    y_max_ks_test = results_test_sorted['Cumulative Perc Good'].iloc[max_ks_index_test]
+    max_ks_index_validacao_cruzada = np.argmax(results_validacao_cruzada_sorted['Cumulative Perc Good'] - results_validacao_cruzada_sorted['Cumulative Perc Bad'])
+    x_max_ks_validacao_cruzada = results_validacao_cruzada_sorted['Cumulative Perc Population'].iloc[max_ks_index_validacao_cruzada]
+    y_max_ks_validacao_cruzada = results_validacao_cruzada_sorted['Cumulative Perc Good'].iloc[max_ks_index_validacao_cruzada]
 
     # Calculate AUC and ROC for the training set
     y_true_train = results_train[target]
@@ -774,6 +668,12 @@ def auc_precision_recall_ks_juntos(classificador, target, y_train, y_predict_tra
     auc_test = roc_auc_score(y_true_test, y_scores_test)
     fpr_test, tpr_test, thresholds_test = roc_curve(y_true_test, y_scores_test)
 
+    # Calculate AUC and ROC for the cross validation set
+    y_true_validacao_cruzada = results_validacao_cruzada[target]
+    y_scores_validacao_cruzada = results_validacao_cruzada['predict_proba_1']
+    auc_validacao_cruzada = roc_auc_score(y_true_validacao_cruzada, y_scores_validacao_cruzada)
+    fpr_validacao_cruzada, tpr_validacao_cruzada, thresholds_validacao_cruzada = roc_curve(y_true_validacao_cruzada, y_scores_validacao_cruzada)
+
     # Calculate Precision-Recall curve for the training set
     y_true_train = results_train[target]
     y_scores_train = results_train['predict_proba_1']
@@ -785,15 +685,24 @@ def auc_precision_recall_ks_juntos(classificador, target, y_train, y_predict_tra
     y_scores_test = results_test['predict_proba_1']
     precision_test, recall_test, _ = precision_recall_curve(y_true_test, y_scores_test)
     average_precision_test = average_precision_score(y_true_test, y_scores_test)
-    
-    # Calculate KS curve for the training set
-    KS_test = round(np.max(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad']), 2)
 
-    # Calculate KS curve for the test set
+    # Calculate Precision-Recall curve for the cross validation set
+    y_true_validacao_cruzada = results_validacao_cruzada[target]
+    y_scores_validacao_cruzada = results_validacao_cruzada['predict_proba_1']
+    precision_validacao_cruzada, recall_validacao_cruzada, _ = precision_recall_curve(y_true_validacao_cruzada, y_scores_validacao_cruzada)
+    average_precision_validacao_cruzada = average_precision_score(y_true_validacao_cruzada, y_scores_validacao_cruzada)
+
+    # Calculate KS curve for the training set
     KS_train = round(np.max(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad']), 2)
 
+    # Calculate KS curve for the test set
+    KS_test = round(np.max(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad']), 2)
+
+    # Calculate KS curve for the cross validation set
+    KS_validacao_cruzada = round(np.max(results_validacao_cruzada_sorted['Cumulative Perc Good'] - results_validacao_cruzada_sorted['Cumulative Perc Bad']), 2)
+
     # Plot ROC and Precision-Recall curves side by side
-    fig, axs = plt.subplots(1, 3, figsize=(18, 7))
+    fig, axs = plt.subplots(1, 3, figsize=(14, 5))
 
     # Training set ROC curve
     axs[0].plot(fpr_train, tpr_train, label='Train ROC Curve (AUC = {:.2f})'.format(auc_train), color='blue')
@@ -801,22 +710,30 @@ def auc_precision_recall_ks_juntos(classificador, target, y_train, y_predict_tra
     axs[0].set_xlabel('False Positive Rate', fontsize=10)
     axs[0].set_ylabel('True Positive Rate', fontsize=10)
     axs[0].set_title(f'ROC Curve - {classificador}', fontsize=10)
-    axs[0].legend()
+    axs[0].legend(loc='upper right', bbox_to_anchor=(1.2, 0.2), fontsize = '7')
 
     # Test set ROC curve
     axs[0].plot(fpr_test, tpr_test, label='Test ROC Curve (AUC = {:.2f})'.format(auc_test), color='red')
-    axs[0].legend()
+    axs[0].legend(loc='upper right', bbox_to_anchor=(1.2, 0.2), fontsize = '7')
+
+    # Cross validation set ROC curve
+    axs[0].plot(fpr_validacao_cruzada, tpr_validacao_cruzada, label='Cross Val ROC Curve (AUC = {:.2f})'.format(auc_validacao_cruzada), color='green')
+    axs[0].legend(loc='upper right', bbox_to_anchor=(1.2, 0.2), fontsize = '7')
 
     # Training set Precision-Recall curve
     axs[1].plot(recall_train, precision_train, label='Train Precision-Recall Curve', color='blue')
     axs[1].set_xlabel('Recall', fontsize=10)
     axs[1].set_ylabel('Precision', fontsize=10)
     axs[1].set_title(f'Precision-Recall Curve - {classificador}', fontsize=10)
-    axs[1].legend()
+    axs[1].legend(loc='upper right', bbox_to_anchor=(1.2, 1), fontsize = '7')
 
     # Test set Precision-Recall curve
     axs[1].plot(recall_test, precision_test, label='Test Precision-Recall Curve', color='red')
-    axs[1].legend()
+    axs[1].legend(loc='upper right', bbox_to_anchor=(1.2, 1), fontsize = '7')
+
+    # Cross Validation set Precision-Recall curve
+    axs[1].plot(recall_validacao_cruzada, precision_validacao_cruzada, label='Cross Val Precision-Recall Curve', color='green')
+    axs[1].legend(loc='upper right', bbox_to_anchor=(1.2, 1), fontsize = '7')
 
     # Train set KS curve
     axs[2].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], label='Train Positive Class (Class 1)', color='blue')
@@ -829,7 +746,7 @@ def auc_precision_recall_ks_juntos(classificador, target, y_train, y_predict_tra
     axs[2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
     axs[2].set_ylabel('Cumulative Percentage', fontsize=10)
     axs[2].set_title(f'KS Plot - {classificador}', fontsize=10)
-    axs[2].legend()
+    axs[2].legend(loc='upper right', bbox_to_anchor=(1.2, 0.4), fontsize = '7')
 
     # Test set KS curve
     axs[2].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], label='Test Positive Class (Class 1)', color='red')
@@ -842,11 +759,23 @@ def auc_precision_recall_ks_juntos(classificador, target, y_train, y_predict_tra
     axs[2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
     axs[2].set_ylabel('Cumulative Percentage', fontsize=10)
     axs[2].set_title(f'KS Plot - {classificador}', fontsize=10)
-    axs[2].legend()
+    axs[2].legend(loc='upper right', bbox_to_anchor=(1.2, 0.4), fontsize = '7')
+
+    # Cross Validation set KS curve
+    axs[2].plot(results_validacao_cruzada_sorted['Cumulative Perc Population'], results_validacao_cruzada_sorted['Cumulative Perc Good'], label='Cross Val Positive Class (Class 1)', color='green')
+    axs[2].plot(results_validacao_cruzada_sorted['Cumulative Perc Population'], results_validacao_cruzada_sorted['Cumulative Perc Bad'], label='Cross Val Negative Class (Class 0)', color='green')
+    axs[2].plot([x_max_ks_validacao_cruzada, x_max_ks_validacao_cruzada], [0.38, y_max_ks_validacao_cruzada], color='gray', linestyle='--')
+    axs[2].fill_between(results_validacao_cruzada_sorted['Cumulative Perc Population'], results_validacao_cruzada_sorted['Cumulative Perc Good'], results_validacao_cruzada_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[2].text(x=results_validacao_cruzada_sorted['Cumulative Perc Population'].iloc[np.argmax(results_validacao_cruzada_sorted['Cumulative Perc Good'] - results_validacao_cruzada_sorted['Cumulative Perc Bad'])],
+                y=(0.45 + results_validacao_cruzada_sorted['Cumulative Perc Good'].iloc[np.argmax(results_validacao_cruzada_sorted['Cumulative Perc Good'] - results_validacao_cruzada_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS_validacao_cruzada), fontsize=12, color='green', ha='left', va='center', rotation=45)
+    axs[2].set_xlabel('Cumulative Percentage of Population', fontsize=10)
+    axs[2].set_ylabel('Cumulative Percentage', fontsize=10)
+    axs[2].set_title(f'KS Plot - {classificador}', fontsize=10)
+    axs[2].legend(loc='upper right', bbox_to_anchor=(1.2, 0.4), fontsize = '7')
 
     plt.tight_layout()
     plt.show()
-
 
 
 
@@ -1235,19 +1164,51 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
                 ('scaler', make_pipeline(MinMaxScaler()), cols)
             ]),
-            LogisticRegression(random_state=42, class_weight={0:1, 1:class_weight}, solver='liblinear')
+        LogisticRegression(
+            random_state=42, # Semente aleatória para reproducibilidade dos resultados
+            class_weight={0: 1, 1: class_weight}, # Peso atribuído às classes. Pode ser útil para lidar com conjuntos de dados desbalanceados.
+            C=1, # Parâmetro de regularização inversa. Controla a força da regularização.
+            penalty='l2', # Tipo de regularização. 'l1', 'l2', 'elasticnet', ou 'none'.
+            max_iter=50, # Número máximo de iterações para a convergência do otimizador.
+            solver='liblinear' # Algoritmo de otimização. 'newton-cg', 'lbfgs', 'liblinear' (gradiente descendente), 'sag' (Stochastic gradient descent), 'saga' (Stochastic gradient descent que suporta reg L1).
+            )
         ),
         'Random Forest': make_pipeline(
             ColumnTransformer([
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
             ]),
-            RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, max_depth=9, class_weight={0:1, 1:class_weight})
+        RandomForestClassifier(
+            random_state=42,            # Semente aleatória para reproducibilidade dos resultados
+            criterion='log_loss',       # Critério usado para medir a qualidade de uma divisão
+            n_estimators=50,           # Número de árvores na floresta (equivalente ao n_estimators no XGBoost)
+            max_depth=8,                # Profundidade máxima de cada árvore
+            class_weight={0:1, 1:class_weight},  # Peso das classes em casos desequilibrados
+            min_samples_split=2,        # O número mínimo de amostras necessárias para dividir um nó interno
+            min_samples_leaf=1,         # O número mínimo de amostras necessárias para ser um nó folha
+            max_features='auto',        # O número máximo de características a serem consideradas para a melhor divisão
+            max_leaf_nodes=None,        # O número máximo de folhas que uma árvore pode ter
+            bootstrap=True               # Se deve ou não amostrar com substituição ao construir árvores
+            )
         ),
         'XGBoost': make_pipeline(
             ColumnTransformer([
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
             ]),
-            XGBClassifier(random_state=42, n_estimators=20, max_depth=9, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight=class_weight)
+        XGBClassifier(
+            random_state=42,            # Semente aleatória para reproducibilidade dos resultados
+            n_estimators=50,           # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+            max_depth=7,                # Profundidade máxima de cada árvore
+            learning_rate=0.05,         # Taxa de aprendizado - controla a contribuição de cada árvore
+            eval_metric='logloss',      # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
+            objective='binary:logistic',# Define o objetivo do modelo, 'binary:logistic' para classificação binária
+            scale_pos_weight=class_weight,  # Peso das classes positivas em casos desequilibrados
+            reg_alpha=1,                # Termo de regularização L1 (penalidade nos pesos)
+            reg_lambda=0,               # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+            gamma=1,                    # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+            colsample_bytree=0.5,       # Fração de características a serem consideradas ao construir cada árvore
+            subsample=0.5,              # Fração de amostras a serem usadas para treinar cada árvore
+            base_score=0.5              # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
+            )
         )
     }
 
@@ -1264,6 +1225,7 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
     y_proba_test = model.predict_proba(x_test)
 
     return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test
+
 
 def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, class_weight):
 
@@ -1404,7 +1366,9 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
     precision_scores = []
     recall_scores = []
     f1_scores = []
-
+    probas = []
+    preds = []
+    labels = []
     # Loop pelos folds
     for train_idx, test_idx in kfold.split(df_raw):
         # Criar DataFrames de treino e teste
@@ -1455,19 +1419,51 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
                     ('scaler', make_pipeline(MinMaxScaler()), cols)
                 ]),
-                LogisticRegression(random_state=42, class_weight={0:1, 1:class_weight}, solver='liblinear')
+                LogisticRegression(
+                    random_state=42, # Semente aleatória para reproducibilidade dos resultados
+                    class_weight={0: 1, 1: class_weight}, # Peso atribuído às classes. Pode ser útil para lidar com conjuntos de dados desbalanceados.
+                    C=2, # Parâmetro de regularização inversa. Controla a força da regularização.
+                    penalty='l2', # Tipo de regularização. 'l1', 'l2', 'elasticnet', ou 'none'.
+                    max_iter=50, # Número máximo de iterações para a convergência do otimizador.
+                    solver='liblinear' # Algoritmo de otimização. 'newton-cg', 'lbfgs', 'liblinear' (gradiente descendente), 'sag' (Stochastic gradient descent), 'saga' (Stochastic gradient descent que suporta reg L1).
+                )
             ),
             'Random Forest': make_pipeline(
                 ColumnTransformer([
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
                 ]),
-                RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, max_depth=9, class_weight={0:1, 1:class_weight})
+                RandomForestClassifier(
+                    random_state=42,            # Semente aleatória para reproducibilidade dos resultados
+                    criterion='log_loss',       # Critério usado para medir a qualidade de uma divisão
+                    n_estimators=100,           # Número de árvores na floresta (equivalente ao n_estimators no XGBoost)
+                    max_depth=8,                # Profundidade máxima de cada árvore
+                    class_weight={0:1, 1:class_weight},  # Peso das classes em casos desequilibrados
+                    min_samples_split=2,        # O número mínimo de amostras necessárias para dividir um nó interno
+                    min_samples_leaf=1,         # O número mínimo de amostras necessárias para ser um nó folha
+                    max_features='auto',        # O número máximo de características a serem consideradas para a melhor divisão
+                    max_leaf_nodes=None,        # O número máximo de folhas que uma árvore pode ter
+                    bootstrap=True               # Se deve ou não amostrar com substituição ao construir árvores
+                )
             ),
             'XGBoost': make_pipeline(
                 ColumnTransformer([
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
                 ]),
-                XGBClassifier(random_state=42, n_estimators=20, max_depth=9, learning_rate=0.01, eval_metric='logloss', objective='binary:logistic', scale_pos_weight=class_weight)
+                XGBClassifier(
+                    random_state=42,            # Semente aleatória para reproducibilidade dos resultados
+                    n_estimators=100,           # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+                    max_depth=7,                # Profundidade máxima de cada árvore
+                    learning_rate=0.05,         # Taxa de aprendizado - controla a contribuição de cada árvore
+                    eval_metric='logloss',      # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
+                    objective='binary:logistic',# Define o objetivo do modelo, 'binary:logistic' para classificação binária
+                    scale_pos_weight=class_weight,  # Peso das classes positivas em casos desequilibrados
+                    reg_alpha=1,                # Termo de regularização L1 (penalidade nos pesos)
+                    reg_lambda=0,               # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+                    gamma=1,                    # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+                    colsample_bytree=0.5,       # Fração de características a serem consideradas ao construir cada árvore
+                    subsample=0.5,              # Fração de amostras a serem usadas para treinar cada árvore
+                    base_score=0.5              # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
+                )
             )
         }
 
@@ -1479,25 +1475,96 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
         # Treinar o modelo usando os dados de treinamento
         model.fit(x_train, y_train)
 
+        # Guardar os Labels
+        labels.append(y_test)
+
+        # Obter as probabilidades previstas para ambas as classes
+        y_proba = model.predict_proba(x_test)
+        probas.append(y_proba)  # Armazenar as probabilidades para este fold
+
         # Fazer as previsões usando o modelo nos dados de teste
         y_pred = model.predict(x_test)
+        preds.append(y_pred)
 
         # Calcular as métricas
         accuracy = accuracy_score(y_test, y_pred)
         precision = precision_score(y_test, y_pred)
         recall = recall_score(y_test, y_pred)
         f1 = f1_score(y_test, y_pred)
+        y_proba = model.predict_proba(x_test)
 
         accuracy_scores.append(accuracy)
         precision_scores.append(precision)
         recall_scores.append(recall)
         f1_scores.append(f1)
+        
 
-    # Calcular a média das métricas para todos os folds
-    mean_accuracy = np.mean(accuracy_scores)
-    mean_precision = np.mean(precision_scores)
-    mean_recall = np.mean(recall_scores)
-    mean_f1 = np.mean(f1_scores)
+        # Calcular a média das métricas para todos os folds
+        mean_accuracy = np.mean(accuracy_scores)
+        mean_precision = np.mean(precision_scores)
+        mean_recall = np.mean(recall_scores)
+        mean_f1 = np.mean(f1_scores)
+
+################### Rótulos dos Folds
+    # Seu array original de labels
+    all_labels = np.concatenate(labels)
+
+    # Número total de registros no conjunto de teste
+    num_records = len(y_test)
+
+    # Lista para armazenar as modas dos rótulos para cada registro
+    mode_labels_by_record = []
+
+    # Loop através dos registros
+    for i in range(num_records):
+        # Obter todos os rótulos para o registro i
+        labels_for_record = all_labels[i::num_records]
+        # Calcular a moda dos rótulos para o registro i
+        mode_label_for_record = mode(labels_for_record).mode[0]
+        # Adicionar a moda à lista
+        mode_labels_by_record.append(mode_label_for_record)
+
+    # Converter a lista de modas por registro para um array
+    mode_labels_by_record = np.array(mode_labels_by_record)
+    mode_labels_by_record = pd.DataFrame(mode_labels_by_record.flatten()).rename({0:'loan_status'}, axis = 1)
+
+################## PREDIÇÕES
+    # Concatenar as previsões de todos os folds
+    all_preds = np.concatenate(preds)
+
+    # Número total de registros no conjunto de teste
+    num_records = len(y_test)
+
+    # Lista para armazenar as modas das previsões para cada registro
+    mode_preds_by_record = []
+
+    # Loop através dos registros
+    for i in range(num_records):
+        # Obter todas as previsões para o registro i
+        preds_for_record = all_preds[i::num_records]
+        # Calcular a moda das previsões para o registro i
+        mode_preds_for_record = mode(preds_for_record).mode[0]
+        # Adicionar a moda à lista
+        mode_preds_by_record.append(mode_preds_for_record)
+
+    # Converter a lista de modas por registro para um array
+    mode_preds_by_record = np.array(mode_preds_by_record)
+
+################## PROBABILIDADES
+    # Juntando as Probabilidades
+    all_probas = np.concatenate(probas)
+    mean_probas = np.mean(all_probas, axis=0)
+
+    num_records = len(y_test)
+    probas_by_record = []
+
+    for i in range(num_records):
+        probas_for_record = all_probas[i::num_records]  # Obter todas as probabilidades para o registro i
+        mean_probas_for_record = np.mean(probas_for_record, axis=0)
+        probas_by_record.append(mean_probas_for_record)
+
+    # Converter a lista de probabilidades médias por registro para um array
+    mean_probas_by_record = np.array(probas_by_record)
 
     # Criar um DataFrame com as métricas
     metricas_finais = pd.DataFrame({
@@ -1509,7 +1576,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
         'Classificador': classificador
     }, index=[1])
 
-    return metricas_finais
+    return metricas_finais, mode_labels_by_record, mode_preds_by_record, mean_probas_by_record
 
 
 def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
