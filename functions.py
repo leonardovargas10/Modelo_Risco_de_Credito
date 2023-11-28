@@ -6,6 +6,7 @@ import seaborn as sns
 from IPython.display import display, Image
 from tabulate import tabulate
 from matplotlib.lines import Line2D
+from matplotlib.ticker import FuncFormatter
 
 ## Bibliotecas de Modelagem Matemática e Estatística
 import numpy as np
@@ -21,6 +22,7 @@ from numpy import interp
 
 # Bibliotecas de Seleção de Modelos
 from skopt import BayesSearchCV
+from hyperopt import fmin, tpe, hp, Trials
 from sklearn.model_selection import train_test_split, KFold, cross_val_score, cross_validate, cross_val_predict
 from sklearn.feature_selection import VarianceThreshold, chi2, mutual_info_classif
 
@@ -32,6 +34,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer, KNNImputer
 
 # Bibliotecas de Modelos de Machine Learning
+import pickle
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -1071,7 +1074,10 @@ def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_pr
     return metricas_finais
 
 def metricas_classificacao_modelos_juntos(lista_modelos):
-    metricas_modelos = pd.concat(lista_modelos)#.set_index('Classificador')
+    if len(lista_modelos) > 0:
+        metricas_modelos = pd.concat(lista_modelos)#.set_index('Classificador')
+    else:
+        metricas_modelos = lista_modelos[0]
     # Redefina o índice para torná-lo exclusivo
     df = metricas_modelos.reset_index(drop=True)
     df = df.round(2)
@@ -1106,26 +1112,51 @@ def metricas_classificacao_modelos_juntos(lista_modelos):
     styled_df
     return styled_df
 
-def retorno_financeiro(target, y_true, y_predict):
-    df = pd.DataFrame({'y_true':y_true[target].values, 'y_predict':y_predict})
+def retorno_financeiro(df, target, y, y_predict):
 
-    TN = df.loc[(df['y_true'] == 0) & (df['y_predict'] == 0)].shape[0]
-    FN = df.loc[(df['y_true'] == 1) & (df['y_predict'] == 0)].shape[0]
-    FP = df.loc[(df['y_true'] == 0) & (df['y_predict'] == 1)].shape[0]
-    TP = df.loc[(df['y_true'] == 1) & (df['y_predict'] == 1)].shape[0]
+    df_aux = df.copy()
+    df_aux['term'] = np.where(df_aux['term'] == ' 36 months', 36, 60)
+    df_aux['loan_amnt_with_int_rate'] = df_aux['installment']*df_aux['term']
+    df_aux['y_true'] = y[target].values
+    df_aux['y_predict'] = y_predict
+    df_aux = df_aux[['installment', 'loan_amnt', 'term', 'int_rate', 'loan_amnt_with_int_rate', 'y_true', 'y_predict']]
 
-    matriz_confusao = np.array(
-        [(TN, FP),
-        (FN, TP)]
-    )
-    matriz_custo_beneficios = np.array(
-        [(0, 10),
-        (0, 90)]
-    )
-    retorno_financeiro = int(
-        (matriz_confusao[0, 0]*matriz_custo_beneficios[0, 0]) - (matriz_confusao[0, 1]*matriz_custo_beneficios[0, 1]) - (matriz_confusao[1, 0]*matriz_custo_beneficios[1, 0]) + (matriz_confusao[1, 1]*matriz_custo_beneficios[1, 1])
-        )
-    return retorno_financeiro
+    TN = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE ELE É BOM
+    FN = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É MAU E MEU MODELO FALA QUE ELE É BOM
+    FP = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE É MAU
+    TP = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É MAU E O MEU MODELO FALA QUE É MAU
+
+    # matriz_confusao = np.array(
+    #     [(TN, FP),
+    #     (FN, TP)]
+    # )
+    # matriz_custo_beneficios = np.array(
+    #     [(0, 10),
+    #     (0, 90)]
+    # )
+    # retorno_financeiro = int(
+    #     (matriz_confusao[0, 0]*matriz_custo_beneficios[0, 0]) - (matriz_confusao[0, 1]*matriz_custo_beneficios[0, 1]) - (matriz_confusao[1, 0]*matriz_custo_beneficios[1, 0]) + (matriz_confusao[1, 1]*matriz_custo_beneficios[1, 1])
+    #     )
+
+    df_aux['caso'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), 'TN', # Ganha a Diferença entre Valor Bruto e Valor com Juros
+                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), 'FN', # Perde o valor emprestado
+                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 'FP', # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
+                        'TP' # Não ganho nada
+    )))
+
+    df_aux['retorno_financeiro'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), df_aux['loan_amnt_with_int_rate'] - df_aux['loan_amnt'], # Ganha a Diferença entre Valor Bruto e Valor com Juros
+                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), df_aux['loan_amnt']*(-1), # Perde o valor emprestado
+                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), (df_aux['loan_amnt_with_int_rate'] - df_aux['loan_amnt'])*(-1), # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
+                        0 # Não ganho nada
+    )))
+
+    retorno_financeiro_por_caso = df_aux.groupby('caso', as_index = False)['retorno_financeiro'].sum()
+
+    retorno_financeiro = int(df_aux['retorno_financeiro'].sum())
+
+
+
+    return retorno_financeiro#, retorno_financeiro_por_caso
 
 
 
@@ -1617,6 +1648,92 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
 
     return metricas_finais, cv_results
 
+# def modelo_otimizado_hyperopt_(classificador, target, x_train, y_train, x_test, y_test):
+
+#     cols = list(x_train.columns)
+
+#     # Define o ColumnTransformer
+#     preprocessor = ColumnTransformer([
+#         ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+#         ('scaler', make_pipeline(MinMaxScaler()), cols)
+#     ])
+
+#     # Divide o conjunto de treinamento em treinamento e validação
+#     x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.2, random_state=42)
+
+#     # Função de avaliação para o Hyperopt
+#     def objective(params):
+#         model = make_pipeline(
+#             preprocessor,
+#             XGBClassifier(
+#                 random_state=42,
+#                 eval_metric='logloss',
+#                 objective='binary:logistic',
+#                 **params
+#             )
+#         )
+
+#         # Treina o modelo com Early Stopping usando o conjunto de validação
+#         model.fit(
+#             x_train, 
+#             y_train.values.ravel(),
+#             eval_set=[(x_val, y_val.values.ravel())],  # Conjunto de dados utilizado para otimização
+#             early_stopping_rounds=10,  # Número de iterações sem melhoria no conjunto de validação para parar o treinamento
+#             verbose=False
+#         )
+
+#         # Obtém a melhor iteração do modelo
+#         best_iteration = model.named_steps['xgbclassifier'].best_iteration
+
+#         # Use a métrica de validação cruzada para otimização
+#         score = model.named_steps['xgbclassifier'].best_score
+#         return -score  # Hyperopt minimiza a função objetivo, então multiplicamos por -1
+
+#     # Espaço de busca para os hiperparâmetros
+#     space = {
+#         'n_estimators': hp.choice('n_estimators', [10, 20, 50, 100]),
+#         'max_depth': hp.choice('max_depth', [4, 5, 7, 8, 9, 10]),
+#         'learning_rate': hp.uniform('learning_rate', 0.01, 0.1),
+#         'reg_alpha': hp.uniform('reg_alpha', 0.5, 1),
+#         'reg_lambda': hp.uniform('reg_lambda', 0.5, 1),
+#         'gamma': hp.uniform('gamma', 0.5, 1),
+#         'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1),
+#         'subsample': hp.uniform('subsample', 0.5, 1),
+#         'scale_pos_weight': hp.choice('scale_pos_weight', [3, 5, 8, 10, 12, 14]),
+#         'base_score': hp.uniform('base_score', 0.30, 0.90)
+#     }
+
+#     # Executa a otimização
+#     trials = Trials()
+#     best_params = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=10, trials=trials, verbose=0)
+
+
+#     # Cria o modelo final com os melhores hiperparâmetros encontrados
+#     best_model = XGBClassifier(
+#         n_estimators=int(best_params['n_estimators']),
+#         max_depth=int(best_params['max_depth']),
+#         learning_rate=best_params['learning_rate'],
+#         subsample=best_params['subsample'],
+#         reg_alpha=best_params['reg_alpha'],
+#         reg_lambda=best_params['reg_lambda'],
+#         gamma=best_params['gamma'],
+#         colsample_bytree=best_params['colsample_bytree'],
+#         scale_pos_weight=int(best_params['scale_pos_weight']),
+#         base_score=best_params['base_score'],
+#         random_state=42
+#     )
+
+#     # Treina o modelo final no conjunto completo de treinamento
+#     best_model.fit(x_train, y_train.values.ravel())
+
+#     y_pred_train = best_model.predict(x_train)
+#     y_pred_test = best_model.predict(x_test)
+
+#     y_proba_train = best_model.predict_proba(x_train)
+#     y_proba_test = best_model.predict_proba(x_test)
+
+#     return best_model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, best_params
+
 
 def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
     def simple_imputer(df):
@@ -1644,16 +1761,16 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
         BayesSearchCV(
             XGBClassifier(random_state=42, eval_metric='logloss', objective='binary:logistic'),
             {
-                'n_estimators': (10, 15, 20, 50), # Número de Árvores construídas
-                'max_depth': (4, 5, 7, 8, 9, 10), # Profundidade Máxima de cada Árvore
+                'n_estimators': (50, 100), # Número de Árvores construídas
+                'max_depth': (7, 8, 9), # Profundidade Máxima de cada Árvore
                 'learning_rate': (0.01, 0.05), # Tamanho do passo utilizado no Método do Gradiente Descendente
                 'reg_alpha':(0.5, 1), # Valor do Alpha aplicado durante a Regularização Lasso L1 
                 'reg_lambda':(0.5, 1), # Valor do Lambda aplicado durante a Regularização Ridge L2
                 'gamma':(0.5, 1), # Valor mínimo permitido para um Nó de Árvore ser aceito. Ajuda a controlar o crescimento das Árvores, evitando divisões insignificantes
                 'colsample_bytree':(0.5, 1), # Porcentagem de Colunas utilizada para a amostragem aleatória durante a criação das Árvores
                 'subsample':(0.5, 1), # Porcentagem de Linhas utilizada para a amostragem aleatória durante a criação das Árvores
-                'scale_pos_weight':(3, 5, 8, 10, 12, 14), # Peso atribuído a classe positiva, aumentando a importância da classe minoritária
-                'base_score':(0.30, 0.40, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90)
+                'scale_pos_weight':(4, 5, 6), # Peso atribuído a classe positiva, aumentando a importância da classe minoritária
+                #'base_score':(0.40, 0.41, 0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.50, 0.51, 0.55, 0.56, 0.57, 0.58, 0.59, 0.60) # Threshold de Probabilidade de decisão do modelo
             },
             n_iter=10,
             random_state=42,
@@ -1672,49 +1789,366 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
     y_proba_train = model.predict_proba(x_train)
     y_proba_test = model.predict_proba(x_test)
 
-    return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, model.named_steps['bayessearchcv'].best_params_
+    melhores_hiperparametros = model.named_steps['bayessearchcv'].best_params_
+    hiperparametros = pd.DataFrame([melhores_hiperparametros])
+
+    return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, hiperparametros
+
+def melhores_hiperpametros_modelo(melhores_hiperpametros):
+    # Acesse os hiperparâmetros
+    hiperparametros = melhores_hiperpametros
+
+    # Crie um DataFrame a partir dos hiperparâmetros
+    df = hiperparametros.reset_index(drop=True)
+    df = df.round(2)
+
+    def color_etapa(val):
+        color = 'black'
+        if val == 'treino':
+            color = 'blue'
+        elif val == 'teste':
+            color = 'red'
+        return f'color: {color}; font-weight: bold;'
+
+    # Função para formatar os valores com até duas casas decimais
+    def format_values(val):
+        if isinstance(val, (int, float)):
+            return f'{val:.2f}'
+        return val
+
+    # Estilizando o DataFrame
+    styled_df = df.style\
+        .format(format_values)\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px')\
+        .applymap(color_etapa, subset=pd.IndexSlice[:, :])\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+        .set_table_styles([
+            {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
+        ])
+
+    # Mostrando o DataFrame estilizado
+    return styled_df
+
+def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, n_splits):
+
+    def numero_de_anos_emprego_atual(df):
+        df['emp_length'] = (df['emp_length'].replace({'< 1 year':0, '1 year':1, '2 years':2, '3 years':3, '4 years':4, '5 years':5, '6 years':6, '7 years':7, '8 years':8, '9 years':9,'10+ years':10}).fillna(0))
+        df['emp_length'] = df['emp_length'].apply(lambda x:int(x))
+        df['emp_length'] = np.where(df['emp_length'] <= 3, '3_YEARS', 
+                            np.where(df['emp_length'] <= 6, '6_YEARS',
+                            np.where(df['emp_length'] <= 9, '9_YEARS',
+                            '10_YEARS+')))
+        return df['emp_length']
+
+    def numero_de_registros_negativos(df):
+
+        df = df[['loan_status', 'pub_rec']].copy()
+        df[['pub_rec']] = np.where(df[['pub_rec']] == 0, 'sem_registros_negativos', 'com_registros_negativos')
+
+        return df['pub_rec']
+
+    def consulta_de_credito_nos_ultimos_6_meses(df):
+        df = df[['loan_status', 'inq_last_6mths']].copy()
+        df[['inq_last_6mths']] = np.where(df[['inq_last_6mths']] == 0, 'sem_consultas', 'com_consultas')
+
+        return df['inq_last_6mths']
+
+    def compromento_de_renda(df): 
+        df_aux = df[['annual_inc', 'installment', 'loan_amnt', 'term', 'int_rate', 'loan_status']].copy()
+        df_aux['term'] = np.where(df_aux['term'] == ' 36 months', 36, 60)
+        df_aux['loan_amnt_with_int_rate'] = df_aux['installment']*df_aux['term']
+        df_aux['annual_payment'] = np.where(df_aux['term'] == ' 36 months', df_aux['loan_amnt_with_int_rate']/3, df_aux['loan_amnt_with_int_rate']/5)
+        df_aux['annual_income_commitment_rate'] = ((df_aux['annual_payment']/df_aux['annual_inc'])*100).round(2)
+        
+        return df_aux['annual_income_commitment_rate']
+
+    def numero_incidencias_inadimplencia_vencidas_30d(df):
+        df_aux = df[['loan_status', 'delinq_2yrs']].copy()
+        df_aux['delinq_2yrs'] = np.where(df_aux[['delinq_2yrs']] == 0, 'sem_inadimplencia_vencida', 'com_inadimplencia_vencida')
+
+        return df_aux['delinq_2yrs']
+
+    def n_meses_produto_credito_atual(df):
+        df = df.copy()
+        df['issue_d'] = pd.to_datetime(df['issue_d'], format = '%b-%y')
+        df['mths_since_issue_d'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['issue_d'])/np.timedelta64(1, 'M')))
+        df['mths_since_issue_d'] = df['mths_since_issue_d'].fillna(df['mths_since_issue_d'].median())
+        df['mths_since_issue_d'] = np.where(df['mths_since_issue_d'] < 0, df['mths_since_issue_d'].median(), df['mths_since_issue_d'])
+        df['mths_since_issue_d'] = df['mths_since_issue_d'].apply(lambda x:int(x))
+        df['issue_d'] = df['mths_since_issue_d']
+
+        return df['issue_d']
+
+    def n_meses_primeiro_produto_credito(df):
+        df = df.copy()
+        df['earliest_cr_line'] = pd.to_datetime(df['earliest_cr_line'], format = '%b-%y')
+        df['mths_since_earliest_cr_line'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['earliest_cr_line'])/np.timedelta64(1, 'M')))
+        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].fillna(df['mths_since_earliest_cr_line'].median())
+        df['mths_since_earliest_cr_line'] = np.where(df['mths_since_earliest_cr_line'] < 0, df['mths_since_earliest_cr_line'].median(), df['mths_since_earliest_cr_line'])
+        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].apply(lambda x:int(x))
+        df['earliest_cr_line'] = df['mths_since_earliest_cr_line']
+        
+        return df['earliest_cr_line']
+
+    def formato_features_binarias(df):
+        df['term'] = np.where(df['term'] == ' 36 months', 0, 1)
+        df['delinq_2yrs'] = np.where(df['delinq_2yrs'] == 'sem_inadimplencia_vencida', 0, 1)
+        df['initial_list_status'] = np.where(df['initial_list_status'] == 'f', 0, 1)
+        df['pymnt_plan'] = np.where(df['pymnt_plan'] == 'n', 0, 1)
+        df['verification_status'] = np.where(df['verification_status'] == 'Source Verified', 0, 1)
+        df['inq_last_6mths'] = np.where(df['inq_last_6mths'] == 'com_consultas', 0, 1)
+
+        return df
+
+    def taxa_de_bad_por_categoria(df, tipo):
+        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
+        df_aux_2 = df.copy()
+        if tipo == 'Criação':
+            for cat in categoricas:
+                df_aux = df[[f'{cat}', 'loan_status']].copy()
+                good = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 0].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_good'}, axis = 1)
+                bad = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 1].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_bad'}, axis = 1)
+                df_aux = good.merge(bad, on = f'{cat}', how = 'left')
+                df_aux['qt_total'] = df_aux['qt_good'] + df_aux['qt_bad']
+                df_aux[f'bad_rate_{cat}'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
+                df_aux[f'bad_rate_{cat}'] = df_aux[f'bad_rate_{cat}'].apply(lambda x:float(x))
+                df_aux = df_aux[[f'{cat}', f'bad_rate_{cat}']].drop_duplicates().sort_values(by = f'bad_rate_{cat}', ascending = True)
+                df_aux.to_csv(f'features/bad_rate_{cat}.csv', index = False)
+                df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'bad_rate_{cat}']], on = f'{cat}', how = 'left')
+        else:
+            for cat in categoricas:
+                ft = pd.read_csv(f'features/bad_rate_{cat}.csv')
+                replace_dict = dict(zip(ft[f'{cat}'], ft[f'bad_rate_{cat}']))
+                df_aux_2[f'bad_rate_{cat}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+
+        return df_aux_2
+
+    def media_categoria_variavel_quantitativa(df, tipo):
+        df_aux_2 = df.copy()
+        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'delinq_2yrs', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
+        quantitativas = ['loan_amnt', 'int_rate', 'annual_inc', 'annual_income_commitment_rate', 'tot_cur_bal', 'total_rev_hi_lim', 'revol_util', 'open_acc', 'total_acc']
+        if tipo == 'Criação':
+            for cat in categoricas:
+                for quant in quantitativas:
+                    df_aux = df[[f'{cat}', f'{quant}']].copy()
+                    df_aux = pd.DataFrame(df_aux.groupby(f'{cat}', as_index = False)[f'{quant}'].mean()).rename({f'{quant}':f'mean_{cat}_{quant}'}, axis = 1)
+                    df_aux[f'mean_{cat}_{quant}'] = df_aux[f'mean_{cat}_{quant}'].apply(lambda x:float(x))
+                    df_aux[[f'{cat}', f'mean_{cat}_{quant}']].drop_duplicates().sort_values(by = f'mean_{cat}_{quant}', ascending = True)
+                    df_aux.to_csv(f'features/mean_{cat}_{quant}.csv', index = False)
+                    df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'mean_{cat}_{quant}']], on = f'{cat}', how = 'left')
+        else:
+            for cat in categoricas:
+                for quant in quantitativas:
+                    ft = pd.read_csv(f'features/mean_{cat}_{quant}.csv')
+                    replace_dict = dict(zip(ft[f'{cat}'], ft[f'mean_{cat}_{quant}']))
+                    df_aux_2[f'mean_{cat}_{quant}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+
+        return df_aux_2
+
+
+    def simple_imputer(df):
+
+        df_aux = df.copy()
+        imputer = SimpleImputer(strategy = 'median')
+        imputer.fit(df_aux)
+
+        return imputer
+
+    columns_selected = ['loan_status', 'term','grade','sub_grade','purpose', 'delinq_2yrs', 'loan_amnt','int_rate','issue_d','policy_code','pymnt_plan','initial_list_status','installment','emp_length','home_ownership',
+    'verification_status','annual_inc','addr_state', 'tot_cur_bal','total_rev_hi_lim','revol_bal','revol_util','open_acc','total_acc','pub_rec','inq_last_6mths','earliest_cr_line','mths_since_last_record', 'mths_since_last_major_derog',
+    'mths_since_last_delinq']
+
+    df_raw = df[columns_selected].copy()
+
+    # Feature Selection
+
+    features_selected = pd.read_csv('features/features_selected.csv')
+    features_selected = features_selected.loc[features_selected['importance'] > 1] 
+    features_selected = list(features_selected['feature'].unique()) + ['loan_status']
+
+    # Inicializar o KFold para dividir os dados
+    kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+    # Listas para armazenar as métricas para cada fold
+    accuracy_scores = []
+    precision_scores = []
+    recall_scores = []
+    f1_scores = []
+    auc_scores = []  # Lista para armazenar os valores de AUC
+    ks_scores = []   # Lista para armazenar os valores de KS
+    cv_results = []  # Lista para armazenar os resultados de validação cruzada
+
+    # Loop pelos folds
+    for train_idx, test_idx in kfold.split(df_raw):
+        # Criar DataFrames de treino e teste
+        df_train = df_raw.iloc[train_idx]
+        df_test = df_raw.iloc[test_idx]
+
+        # Criação das Features sem Data Leakage
+        df_train['emp_length'] = numero_de_anos_emprego_atual(df_train)
+        df_train['pub_rec'] = numero_de_registros_negativos(df_train)
+        df_train['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_train)
+        df_train['annual_income_commitment_rate'] = compromento_de_renda(df_train)
+        df_train['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_train)
+        df_train['issue_d'] = n_meses_produto_credito_atual(df_train)
+        df_train['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_train)
+        df_train = formato_features_binarias(df_train)
+        df_train = taxa_de_bad_por_categoria(df_train, 'escoragem')
+        df_train = media_categoria_variavel_quantitativa(df_train, 'escoragem')
+
+        df_test['emp_length'] = numero_de_anos_emprego_atual(df_test)
+        df_test['pub_rec'] = numero_de_registros_negativos(df_test)
+        df_test['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_test)
+        df_test['annual_income_commitment_rate'] = compromento_de_renda(df_test)
+        df_test['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_test)
+        df_test['issue_d'] = n_meses_produto_credito_atual(df_test)
+        df_test['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_test)
+        df_test = formato_features_binarias(df_test)
+        df_test = taxa_de_bad_por_categoria(df_test, 'escoragem')
+        df_test = media_categoria_variavel_quantitativa(df_test, 'escoragem')
+
+        # Filtragem das Features que passaram no Feature Selection
+        df_train = df_train[features_selected]
+        df_test = df_test[features_selected]
+
+        # Separação Feature e Target
+        x_train, y_train = separa_feature_target('loan_status', df_train)
+        x_test, y_test = separa_feature_target('loan_status', df_test)
+        
+        # Imputer
+        cols = list(x_train.columns)
+        imputer = simple_imputer(x_train)
+        x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
+        x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
+
+        # Define as colunas categóricas e numéricas
+        model = make_pipeline(
+                ColumnTransformer([
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
+                ]),
+                XGBClassifier(
+                    random_state=42, # Semente aleatória para reproducibilidade dos resultados
+                    eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
+                    objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
+                    n_estimators = 100, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+                    max_depth = 8, # Profundidade máxima de cada árvore
+                    learning_rate = 0.031064809485107696, # Taxa de aprendizado - controla a contribuição de cada árvore
+                    reg_alpha = 0.8585155755799185, # Termo de regularização L1 (penalidade nos pesos)
+                    reg_lambda = 0.712089036230341, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+                    gamma = 0.7190145932204617, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+                    colsample_bytree = 0.8997767208035865, # Fração de características a serem consideradas ao construir cada árvore
+                    subsample = 0.6765419227639857, # Fração de amostras a serem usadas para treinar cada árvore
+                    scale_pos_weight = 5, # Peso das classes positivas em casos desequilibrados
+                    base_score = 0.5 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
+                )
+            )
+
+        # Treinar o modelo usando os dados de treinamento
+        model.fit(x_train, y_train)
+
+        # Obter as probabilidades previstas para ambas as classes
+        y_proba = model.predict_proba(x_test)
+
+        # Fazer as previsões usando o modelo nos dados de teste
+        y_pred = model.predict(x_test)
+
+        # Calcular as métricas
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred)
+        recall = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+        y_proba = model.predict_proba(x_test)
+        fpr, tpr, _ = roc_curve(y_test, y_proba[:, 1])
+        roc_auc = auc(fpr, tpr)
+        ks = max(tpr - fpr)
+
+        accuracy_scores.append(accuracy)
+        precision_scores.append(precision)
+        recall_scores.append(recall)
+        f1_scores.append(f1)
+        auc_scores.append(roc_auc)
+        ks_scores.append(ks)
+
+        # Adicionar resultados de validação cruzada ao DataFrame
+        fold_results = pd.DataFrame({
+            'loan_status': y_test['loan_status'].values,
+            'y_predict': y_pred,
+            'predict_proba_0': y_proba[:, 0],  # Probabilidade da classe 0
+            'predict_proba_1': y_proba[:, 1]  # Probabilidade da classe 1
+        })
+        cv_results.append(fold_results)
+
+
+    # Calcular a média das métricas para todos os folds
+    mean_accuracy = np.mean(accuracy_scores)
+    mean_precision = np.mean(precision_scores)
+    mean_recall = np.mean(recall_scores)
+    mean_f1 = np.mean(f1_scores)
+    mean_auc = np.mean(auc_scores),
+    mean_ks = np.mean(ks_scores)
+
+    # Criar um DataFrame com as métricas
+    metricas_finais = pd.DataFrame({
+        'Acuracia': mean_accuracy,
+        'Precisao': mean_precision,
+        'Recall': mean_recall,
+        'F1-Score': mean_f1,
+        'AUC':mean_auc,
+        'KS': mean_ks,
+        'Etapa': 'validacao_cruzada',
+        'Classificador': classificador
+    }, index=[1])
+
+    return metricas_finais, cv_results
 
 
 
-def modelo_corte_probabilidade(classificador, x_train, y_train, x_test, y_test, target):
+def modelo_corte_probabilidade(df_model, df_retorno_financeiro, target, x, y):
 
-    # Define as colunas categóricas e numéricas
-    qualitativas_numericas = [column for column in x_train.columns if x_train[column].nunique() <= 5]
-    discretas = [column for column in x_train.columns if (x_train[column].nunique() > 5) and (x_train[column].nunique() <= 50)]
-    continuas = [column for column in x_train.columns if x_train[column].nunique() > 50]
+    def simple_imputer(df_model):
+
+        df_aux = df_model.copy()
+        imputer = SimpleImputer(strategy = 'median')
+        imputer.fit(df_aux)
+
+        return imputer
     
-    list_threshold = [0.40, 0.41, 0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.50, 0.51, 0.52, 0.53, 0.54, 0.55]
+    cols = list(x.columns)
+    imputer = simple_imputer(x)
+    x = pd.DataFrame(imputer.transform(x), columns = x.columns)
+    
+    list_threshold = [0.45, 0.50, 0.55]
     list_lucro = []
     for threshold in list_threshold:
         # Define o ColumnTransformer
         preprocessor = ColumnTransformer([
-                    ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                    ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                    ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
-        ])
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+                    ('scaler', make_pipeline(MinMaxScaler()), cols)
+                ])
         model = make_pipeline(
         preprocessor,
         XGBClassifier(
             random_state=42, 
             eval_metric='logloss', 
             objective='binary:logistic', 
-            n_estimators = 15, 
-            max_depth = 7, 
-            learning_rate = 0.029858668143868672,
-            reg_alpha = 0.5255672768385259,
-            reg_lambda = 0.785388901339449,
-            gamma = 0.9600046132186582,
-            colsample_bytree = 0.7717015338451563,
-            subsample = 0.6928647954923324,
-            scale_pos_weight = 8,
+            n_estimators = 100, 
+            max_depth = 8, 
+            learning_rate = 0.031064809485107696,
+            reg_alpha = 0.8585155755799185,
+            reg_lambda = 0.712089036230341,
+            gamma = 0.7190145932204617,
+            colsample_bytree = 0.8997767208035865,
+            subsample = 0.6765419227639857,
+            scale_pos_weight = 5,
             base_score = threshold
-        )
+            )
         )
         
-        model.fit(x_train, y_train)
+        model.fit(x, y)
 
-        y_pred = model.predict(x_test)
-        lucro = retorno_financeiro(target, y_test, y_pred)
+        y_pred = model.predict(x)
+        lucro = retorno_financeiro(df_retorno_financeiro, target, y, y_pred)
         list_lucro.append(lucro)
     
     corte_probabilidade = pd.DataFrame({'threshold':list_threshold, 'lucro':list_lucro})
@@ -1760,3 +2194,31 @@ def modelo_oficial(classificador, x, y):
     y_proba_train = model.predict_proba(x)
 
     return model, y_pred_train, y_proba_train
+
+
+def salvar_modelo_pickle(modelo, caminho_arquivo):
+    """
+    Salva um modelo em um arquivo pickle.
+
+    Parâmetros:
+    - modelo: O modelo treinado que você deseja salvar.
+    - caminho_arquivo: O caminho do arquivo onde o modelo será salvo.
+    """
+    with open(caminho_arquivo, 'wb') as arquivo:
+        pickle.dump(modelo, arquivo)
+    print(f"Modelo salvo em {caminho_arquivo}")
+
+def carregar_modelo_pickle(caminho_arquivo):
+    """
+    Carrega um modelo salvo de um arquivo pickle.
+
+    Parâmetros:
+    - caminho_arquivo: O caminho do arquivo onde o modelo foi salvo.
+
+    Retorna:
+    - O modelo carregado.
+    """
+    with open(caminho_arquivo, 'rb') as arquivo:
+        modelo_carregado = pickle.load(arquivo)
+    print(f"Modelo carregado de {caminho_arquivo}")
+    return modelo_carregado
