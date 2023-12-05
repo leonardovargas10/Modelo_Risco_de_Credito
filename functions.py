@@ -35,6 +35,7 @@ from sklearn.impute import SimpleImputer, KNNImputer
 
 # Bibliotecas de Modelos de Machine Learning
 import pickle
+from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -45,7 +46,8 @@ from sklearn.utils.class_weight import compute_class_weight
 from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
 
 # Bibliotecas de Métricas de Machine Learning
-from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, auc, precision_score, recall_score, precision_recall_curve, average_precision_score, f1_score, confusion_matrix, silhouette_score
+from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+from sklearn.metrics import accuracy_score, roc_auc_score, roc_curve, auc, precision_score, recall_score, precision_recall_curve, average_precision_score, f1_score, log_loss, brier_score_loss, confusion_matrix, silhouette_score
 
 # Parâmetros de Otimização
 import warnings
@@ -802,7 +804,89 @@ def auc_ks_juntos(classificador, target,
     plt.tight_layout()
     plt.show()
 
+def auc_ks_final(classificador, target, y, y_predict, y_predict_proba):
 
+    predict_proba = pd.DataFrame(y_predict_proba.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+
+    # Inicialize as variáveis x_max_ks e y_max_ks fora dos blocos condicionais
+    x_max_ks, y_max_ks = 0, 0
+
+    ### Etapa Final
+    results = y[[target]].copy()
+    results['y_predict'] = y_predict
+    results['predict_proba_0'] = list(predict_proba['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results['predict_proba_1'] = list(predict_proba['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    results_sorted = results.sort_values(by='predict_proba_1', ascending=False)
+    results_sorted['Cumulative N Population'] = range(1, results_sorted.shape[0] + 1)
+    results_sorted['Cumulative N Good'] = results_sorted[target].cumsum()
+    results_sorted['Cumulative N Bad'] = results_sorted['Cumulative N Population'] - results_sorted['Cumulative N Good']
+    results_sorted['Cumulative Perc Population'] = results_sorted['Cumulative N Population'] / results_sorted.shape[0]
+    results_sorted['Cumulative Perc Good'] = results_sorted['Cumulative N Good'] / results_sorted[target].sum()
+    results_sorted['Cumulative Perc Bad'] = results_sorted['Cumulative N Bad'] / (results_sorted.shape[0] - results_sorted[target].sum())
+
+    max_ks_index = np.argmax(results_sorted['Cumulative Perc Good'] - results_sorted['Cumulative Perc Bad'])
+    x_max_ks = results_sorted['Cumulative Perc Population'].iloc[max_ks_index]
+    y_max_ks = results_sorted['Cumulative Perc Good'].iloc[max_ks_index]
+    y_min_ks = results_sorted['Cumulative Perc Bad'].iloc[max_ks_index]
+
+        ###### Calculate AUC and ROC for the training set
+    y_true = results[target]
+    y_scores = results['predict_proba_1']
+    auc = roc_auc_score(y_true, y_scores)
+    fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+        ###### Calculate KS curve for the training set
+    KS = round(np.max(results_sorted['Cumulative Perc Good'] - results_sorted['Cumulative Perc Bad']), 2)
+
+    # Plot ROC and KS curves side by side
+    fig, axs = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Training set ROC curve
+    axs[0].plot(fpr, tpr, label='ROC Curve (AUC = {:.2f})'.format(auc), color='blue')
+    axs[0].fill_between(fpr, 0, tpr, color='gray', alpha=0.3)  # Preencha a área sob a curva ROC
+    axs[0].plot([0, 1], [0, 1], linestyle='--', color='black')
+    axs[0].set_xlabel('False Positive Rate', fontsize = 14)
+    axs[0].set_ylabel('True Positive Rate', fontsize = 14)
+    axs[0].set_title(f'ROC Curve - {classificador}', fontsize = 14)
+
+    # Adicione a legenda personalizada com cores para a curva ROC
+    roc_legend_labels = [
+        {'label': 'ROC Curve (AUC = {:.2f})'.format(auc), 'color': 'blue', 'marker': 'o'},
+    ]
+
+    # Criar marcadores personalizados para a legenda ROC
+    roc_legend_handles = [Line2D([0], [0], marker=label_info['marker'], color='w', markerfacecolor=label_info['color'], markersize=10) for label_info in roc_legend_labels]
+
+    # Adicione a legenda personalizada ao gráfico da curva ROC
+    roc_legend = axs[0].legend(handles=roc_legend_handles, labels=[label_info['label'] for label_info in roc_legend_labels], loc='upper right', bbox_to_anchor=(0.9, 0.4), fontsize='11')
+    roc_legend.set_title('ROC AUC', prop={'size': '11'})
+
+
+    # Train set KS curve
+    axs[1].plot(results_sorted['Cumulative Perc Population'], results_sorted['Cumulative Perc Good'], label='Train Positive Class (Class 1)', color='blue')
+    axs[1].plot(results_sorted['Cumulative Perc Population'], results_sorted['Cumulative Perc Bad'], label='Train Negative Class (Class 0)', color='blue')
+    axs[1].plot([x_max_ks, x_max_ks], [y_min_ks, y_max_ks], color='black', linestyle='--')
+    axs[1].fill_between(results_sorted['Cumulative Perc Population'], results_sorted['Cumulative Perc Good'], results_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[1].text(x=results_sorted['Cumulative Perc Population'].iloc[np.argmax(results_sorted['Cumulative Perc Good'] - results_sorted['Cumulative Perc Bad'])],
+                y=(y_min_ks + results_sorted['Cumulative Perc Good'].iloc[np.argmax(results_sorted['Cumulative Perc Good'] - results_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS), fontsize = 14, color='blue', ha='left', va='center', rotation=45)
+    axs[1].set_xlabel('Cumulative Percentage of Population', fontsize = 14)
+    axs[1].set_ylabel('Cumulative Percentage', fontsize = 14)
+    axs[1].set_title(f'KS Plot - {classificador}', fontsize = 14)
+
+    # Adicione a legenda personalizada com cores
+    ks_legend_labels = [
+        {'label': f'(KS: {KS})', 'color': 'blue', 'marker': 'o'},
+    ]
+
+    # Criar marcadores personalizados para a legenda
+    legend_handles = [Line2D([0], [0], marker=label_info['marker'], color='w', markerfacecolor=label_info['color'], markersize=10) for label_info in ks_legend_labels]
+
+    ks_legend = axs[1].legend(handles=legend_handles, labels=[label_info['label'] for label_info in ks_legend_labels], loc='upper right', bbox_to_anchor=(0.9, 0.4), fontsize='11')
+    ks_legend.set_title('KS', prop={'size': '11'})
+
+    plt.tight_layout()
+    plt.show()
 
 
 def verifica_tipo_variavel(df):
@@ -1112,6 +1196,55 @@ def metricas_classificacao_modelos_juntos(lista_modelos):
     styled_df
     return styled_df
 
+def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_proba):
+
+    predict_proba = pd.DataFrame(y_predict_proba.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+
+    # Amostra Final
+    accuracy = accuracy_score(y, y_predict)
+    precision = precision_score(y, y_predict)
+    recall = recall_score(y, y_predict)
+    f1 = f1_score(y, y_predict)
+    roc_auc = roc_auc_score(y['loan_status'], predict_proba['predict_proba_1'])
+    fpr, tpr, thresholds = roc_curve(y['loan_status'], predict_proba['predict_proba_1'])
+    ks = max(tpr - fpr)
+    total, retorno_financeiro_por_caso = retorno_financeiro(df, 'loan_status', y, y_predict)
+    total = 'R$' + str(int(round(total/1000000, 0))) + ' MM'
+    metricas_finais = pd.DataFrame({'Acuracia': accuracy, 'Precisao': precision, 'Recall': recall, 'F1-Score': f1, 'AUC': roc_auc, 'KS': ks, 'Etapa': 'Amostra Final', 'Classificador': classificador, 'Retorno Financeiro': total}, index=[0])
+
+    df = metricas_finais.reset_index(drop=True)
+    df = df.round(2)
+
+    # Função para formatar as células com base na Etapa
+    def color_etapa(val):
+        color = 'black'
+        if val == 'treino':
+            color = 'blue'
+        elif val == 'teste':
+            color = 'red'
+        return f'color: {color}; font-weight: bold;'
+
+    # Função para formatar os valores com até duas casas decimais
+    def format_values(val):
+        if isinstance(val, (int, float)):
+            return f'{val:.2f}'
+        return val
+
+    # Estilizando o DataFrame
+    styled_df = df.style\
+        .format(format_values)\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px', subset=pd.IndexSlice[:, :])\
+        .applymap(color_etapa, subset=pd.IndexSlice[:, :])\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px', subset=pd.IndexSlice[:, 'Acuracia':'F1-Score'])\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px', subset=pd.IndexSlice[:, 'Etapa'])\
+        .set_table_styles([
+            {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
+        ])
+
+    # Mostrando o DataFrame estilizado
+    styled_df
+    return styled_df
+
 def retorno_financeiro(df, target, y, y_predict):
 
     df_aux = df.copy()
@@ -1126,37 +1259,52 @@ def retorno_financeiro(df, target, y, y_predict):
     FP = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE É MAU
     TP = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É MAU E O MEU MODELO FALA QUE É MAU
 
-    # matriz_confusao = np.array(
-    #     [(TN, FP),
-    #     (FN, TP)]
-    # )
-    # matriz_custo_beneficios = np.array(
-    #     [(0, 10),
-    #     (0, 90)]
-    # )
-    # retorno_financeiro = int(
-    #     (matriz_confusao[0, 0]*matriz_custo_beneficios[0, 0]) - (matriz_confusao[0, 1]*matriz_custo_beneficios[0, 1]) - (matriz_confusao[1, 0]*matriz_custo_beneficios[1, 0]) + (matriz_confusao[1, 1]*matriz_custo_beneficios[1, 1])
-    #     )
-
-    df_aux['caso'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), 'TN', # Ganha a Diferença entre Valor Bruto e Valor com Juros
-                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), 'FN', # Perde o valor emprestado
-                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 'FP', # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
-                        'TP' # Não ganho nada
+    df_aux['caso'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), 'Verdadeiro Negativo (Cliente Bom | Modelo classifica como Bom) - Ganho a Diferença entre Valor Bruto e Valor com Juros', # Ganha a Diferença entre Valor Bruto e Valor com Juros
+                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), 'Falso Negativo (Cliente Mau | Modelo classifica como Bom) - Perco o valor emprestado', # Perde o valor emprestado
+                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 'Falso Positivo (Cliente Bom | Modelo classifica como Mau) - Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros', # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
+                        'Verdadeiro Positivo (Cliente Mau | Modelo classifica como Mau) - Não ganho nada' # Não ganho nada
     )))
 
     df_aux['retorno_financeiro'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), df_aux['loan_amnt_with_int_rate'] - df_aux['loan_amnt'], # Ganha a Diferença entre Valor Bruto e Valor com Juros
                         np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), df_aux['loan_amnt']*(-1), # Perde o valor emprestado
-                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), (df_aux['loan_amnt_with_int_rate'] - df_aux['loan_amnt'])*(-1), # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
+                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 0, # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros (df_aux['loan_amnt_with_int_rate'] - df_aux['loan_amnt'])*(-1)
                         0 # Não ganho nada
     )))
 
-    retorno_financeiro_por_caso = df_aux.groupby('caso', as_index = False)['retorno_financeiro'].sum()
 
     retorno_financeiro = int(df_aux['retorno_financeiro'].sum())
+    retorno_financeiro_por_caso = df_aux.groupby('caso', as_index = False)['retorno_financeiro'].sum().sort_values(by = 'retorno_financeiro', ascending = False)
 
+    # Crie um DataFrame a partir dos hiperparâmetros
+    df = retorno_financeiro_por_caso.reset_index(drop=True)
+    df = df.round(2)
 
+    def color_etapa(val):
+        color = 'black'
+        if val == 'treino':
+            color = 'blue'
+        elif val == 'teste':
+            color = 'red'
+        return f'color: {color}; font-weight: bold;'
 
-    return retorno_financeiro#, retorno_financeiro_por_caso
+    # Função para formatar os valores com até duas casas decimais
+    def format_values(val):
+        if isinstance(val, (int, float)):
+            return f'{val:.2f}'
+        return val
+
+    # Estilizando o DataFrame
+    styled_df = df.style\
+        .format(format_values)\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px')\
+        .applymap(color_etapa, subset=pd.IndexSlice[:, :])\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+        .set_table_styles([
+            {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
+        ])
+
+    return retorno_financeiro, styled_df
 
 
 
@@ -1228,9 +1376,9 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
     x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
     x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
 
-    # Ajuste automático do class_weight para o MLPClassifier
-    if classificador == 'Multilayer Perceptron':
-        class_weight = get_class_weight(y_train, target_class=1)
+    # # Ajuste automático do class_weight para o MLPClassifier
+    # if classificador == 'Multilayer Perceptron':
+    #     class_weight = get_class_weight(y_train, target_class=1)
 
     # Define as colunas categóricas e numéricas
     models = {
@@ -1239,14 +1387,14 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
                 ('scaler', make_pipeline(MinMaxScaler()), cols)
             ]),
-        LogisticRegression(
-            random_state=42, # Semente aleatória para reproducibilidade dos resultados
-            class_weight={0: 1, 1: class_weight}, # Peso atribuído às classes. Pode ser útil para lidar com conjuntos de dados desbalanceados.
-            C=1, # Parâmetro de regularização inversa. Controla a força da regularização.
-            penalty='l2', # Tipo de regularização. 'l1', 'l2', 'elasticnet', ou 'none'.
-            max_iter=50, # Número máximo de iterações para a convergência do otimizador.
-            solver='liblinear' # Algoritmo de otimização. 'newton-cg', 'lbfgs', 'liblinear' (gradiente descendente), 'sag' (Stochastic gradient descent), 'saga' (Stochastic gradient descent que suporta reg L1).
-            )
+            LogisticRegression(
+                random_state=42, # Semente aleatória para reproducibilidade dos resultados
+                class_weight={0: 1, 1: class_weight}, # Peso atribuído às classes. Pode ser útil para lidar com conjuntos de dados desbalanceados.
+                C=1, # Parâmetro de regularização inversa. Controla a força da regularização.
+                penalty='l2', # Tipo de regularização. 'l1', 'l2', 'elasticnet', ou 'none'.
+                max_iter=50, # Número máximo de iterações para a convergência do otimizador.
+                solver='liblinear' # Algoritmo de otimização. 'newton-cg', 'lbfgs', 'liblinear' (gradiente descendente), 'sag' (Stochastic gradient descent), 'saga' (Stochastic gradient descent que suporta reg L1).
+                )
         ),
         'Naive Bayes': make_pipeline(
             ColumnTransformer([
@@ -1304,23 +1452,24 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
             subsample=0.5,              # Fração de amostras a serem usadas para treinar cada árvore
             base_score=0.5              # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
             )
-        ),
-        'Multilayer Perceptron': make_pipeline(
-            ColumnTransformer([
-                ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
-                ('scaler', make_pipeline(MinMaxScaler()), cols)
-            ]),
-        MLPClassifier(
-            hidden_layer_sizes=(100, ),  # Número de camadas ocultas
-            activation='relu',           # Função de ativação
-            solver='adam',               # Otimizador
-            max_iter=200,                # Número máximo de iterações
-            random_state=42,
-            class_weight={0: 1, 1: class_weight},  # Peso para classe minoritária
-            alpha=0.0001,  # Exemplo de ajuste do termo de regularização
-            learning_rate='adaptive'  # Exemplo de ajuste da taxa de aprendizado
         )
-    )
+    #     ,
+    #     'Multilayer Perceptron': make_pipeline(
+    #         ColumnTransformer([
+    #             ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+    #             ('scaler', make_pipeline(MinMaxScaler()), cols)
+    #         ]),
+    #     MLPClassifier(
+    #         hidden_layer_sizes=(100, ),  # Número de camadas ocultas
+    #         activation='relu',           # Função de ativação
+    #         solver='adam',               # Otimizador
+    #         max_iter=200,                # Número máximo de iterações
+    #         random_state=42,
+    #         class_weight={0: 1, 1: class_weight},  # Peso para classe minoritária
+    #         alpha=0.0001,  # Exemplo de ajuste do termo de regularização
+    #         learning_rate='adaptive'  # Exemplo de ajuste da taxa de aprendizado
+    #     )
+    # )
     }
 
     if classificador in models:
@@ -1530,7 +1679,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
         x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
         x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
 
-        # Define as colunas categóricas e numéricas
+    # Define as colunas categóricas e numéricas
         models = {
             'Regressão Logística': make_pipeline(
                 ColumnTransformer([
@@ -1540,47 +1689,71 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                 LogisticRegression(
                     random_state=42, # Semente aleatória para reproducibilidade dos resultados
                     class_weight={0: 1, 1: class_weight}, # Peso atribuído às classes. Pode ser útil para lidar com conjuntos de dados desbalanceados.
-                    C=2, # Parâmetro de regularização inversa. Controla a força da regularização.
+                    C=1, # Parâmetro de regularização inversa. Controla a força da regularização.
                     penalty='l2', # Tipo de regularização. 'l1', 'l2', 'elasticnet', ou 'none'.
                     max_iter=50, # Número máximo de iterações para a convergência do otimizador.
                     solver='liblinear' # Algoritmo de otimização. 'newton-cg', 'lbfgs', 'liblinear' (gradiente descendente), 'sag' (Stochastic gradient descent), 'saga' (Stochastic gradient descent que suporta reg L1).
-                )
+                    )
+            ),
+            'Naive Bayes': make_pipeline(
+                ColumnTransformer([
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
+                ]),
+                GaussianNB(priors = [0.88, 0.12]) # Probabilidade a Priori
+            ),
+            'KNN Classifier': make_pipeline(
+                ColumnTransformer([
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+                    ('scaler', make_pipeline(MinMaxScaler()), cols)
+                ]),
+                KNeighborsClassifier(n_neighbors=5)  # Escolha o número adequado de vizinhos
+            ),
+            'SVM': make_pipeline(
+                ColumnTransformer([
+                    ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+                    ('scaler', make_pipeline(MinMaxScaler()), cols)
+                ]),
+                SVC(kernel='linear', 
+                    class_weight={0: 1, 1: class_weight}, 
+                    random_state=42
+                    )
             ),
             'Random Forest': make_pipeline(
                 ColumnTransformer([
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
                 ]),
-                RandomForestClassifier(
-                    random_state=42,            # Semente aleatória para reproducibilidade dos resultados
-                    criterion='log_loss',       # Critério usado para medir a qualidade de uma divisão
-                    n_estimators=50,           # Número de árvores na floresta (equivalente ao n_estimators no XGBoost)
-                    max_depth = 6,                # Profundidade máxima de cada árvore
-                    class_weight={0:1, 1:class_weight},  # Peso das classes em casos desequilibrados
-                    min_samples_split=2,        # O número mínimo de amostras necessárias para dividir um nó interno
-                    min_samples_leaf=1,         # O número mínimo de amostras necessárias para ser um nó folha
-                    max_features='auto',        # O número máximo de características a serem consideradas para a melhor divisão
-                    max_leaf_nodes=None,        # O número máximo de folhas que uma árvore pode ter
-                    bootstrap=True               # Se deve ou não amostrar com substituição ao construir árvores
+            RandomForestClassifier(
+                random_state=42,            # Semente aleatória para reproducibilidade dos resultados
+                criterion='log_loss',       # Critério usado para medir a qualidade de uma divisão
+                n_estimators=50,           # Número de árvores na floresta (equivalente ao n_estimators no XGBoost)
+                max_depth = 6,                # Profundidade máxima de cada árvore
+                class_weight={0:1, 1:class_weight},  # Peso das classes em casos desequilibrados
+                min_samples_split=2,        # O número mínimo de amostras necessárias para dividir um nó interno
+                min_samples_leaf=1,         # O número mínimo de amostras necessárias para ser um nó folha
+                max_features='auto',        # O número máximo de características a serem consideradas para a melhor divisão
+                max_leaf_nodes=None,        # O número máximo de folhas que uma árvore pode ter
+                bootstrap=True               # Se deve ou não amostrar com substituição ao construir árvores
                 )
             ),
             'XGBoost': make_pipeline(
                 ColumnTransformer([
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
                 ]),
-                XGBClassifier(
-                    random_state=42,            # Semente aleatória para reproducibilidade dos resultados
-                    n_estimators=50,           # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
-                    max_depth = 6,                # Profundidade máxima de cada árvore
-                    learning_rate = 0.04,         # Taxa de aprendizado - controla a contribuição de cada árvore
-                    eval_metric='logloss',      # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
-                    objective='binary:logistic',# Define o objetivo do modelo, 'binary:logistic' para classificação binária
-                    scale_pos_weight=class_weight,  # Peso das classes positivas em casos desequilibrados
-                    reg_alpha=1,                # Termo de regularização L1 (penalidade nos pesos)
-                    reg_lambda=0,               # Termo de regularização L2 (penalidade nos quadrados dos pesos)
-                    gamma=1,                    # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
-                    colsample_bytree=0.5,       # Fração de características a serem consideradas ao construir cada árvore
-                    subsample=0.5,              # Fração de amostras a serem usadas para treinar cada árvore
-                    base_score=0.5              # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
+            XGBClassifier(
+                random_state=42,            # Semente aleatória para reproducibilidade dos resultados
+                tree_method = 'gpu_hist',
+                n_estimators=50,           # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+                max_depth = 6,                # Profundidade máxima de cada árvore
+                learning_rate = 0.04,         # Taxa de aprendizado - controla a contribuição de cada árvore
+                eval_metric='logloss',      # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
+                objective='binary:logistic',# Define o objetivo do modelo, 'binary:logistic' para classificação binária
+                scale_pos_weight=class_weight,  # Peso das classes positivas em casos desequilibrados
+                reg_alpha=1,                # Termo de regularização L1 (penalidade nos pesos)
+                reg_lambda=0,               # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+                gamma=1,                    # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+                colsample_bytree=0.5,       # Fração de características a serem consideradas ao construir cada árvore
+                subsample=0.5,              # Fração de amostras a serem usadas para treinar cada árvore
+                base_score=0.5              # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
                 )
             )
         }
@@ -1759,23 +1932,23 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
     model = make_pipeline(
         preprocessor,
         BayesSearchCV(
-            XGBClassifier(random_state=42, eval_metric='logloss', objective='binary:logistic'),
+            XGBClassifier(random_state=42, tree_method = 'gpu_hist', eval_metric='logloss', objective='binary:logistic'),
             {
-                'n_estimators': (50, 100), # Número de Árvores construídas
+                'n_estimators': (99, 100), # Número de Árvores construídas
                 'max_depth': (7, 8, 9), # Profundidade Máxima de cada Árvore
-                'learning_rate': (0.01, 0.05), # Tamanho do passo utilizado no Método do Gradiente Descendente
+                'learning_rate': (0.03, 0.05), # Tamanho do passo utilizado no Método do Gradiente Descendente
                 'reg_alpha':(0.5, 1), # Valor do Alpha aplicado durante a Regularização Lasso L1 
                 'reg_lambda':(0.5, 1), # Valor do Lambda aplicado durante a Regularização Ridge L2
                 'gamma':(0.5, 1), # Valor mínimo permitido para um Nó de Árvore ser aceito. Ajuda a controlar o crescimento das Árvores, evitando divisões insignificantes
                 'colsample_bytree':(0.5, 1), # Porcentagem de Colunas utilizada para a amostragem aleatória durante a criação das Árvores
                 'subsample':(0.5, 1), # Porcentagem de Linhas utilizada para a amostragem aleatória durante a criação das Árvores
-                'scale_pos_weight':(4, 5, 6), # Peso atribuído a classe positiva, aumentando a importância da classe minoritária
-                #'base_score':(0.40, 0.41, 0.42, 0.43, 0.44, 0.45, 0.46, 0.47, 0.48, 0.49, 0.50, 0.51, 0.55, 0.56, 0.57, 0.58, 0.59, 0.60) # Threshold de Probabilidade de decisão do modelo
+                'scale_pos_weight':(4, 5, 6, 7, 8), # Peso atribuído a classe positiva, aumentando a importância da classe minoritária
+                #'base_score':(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) # Threshold de Probabilidade de decisão do modelo
             },
             n_iter=10,
             random_state=42,
             n_jobs=-1,
-            scoring='roc_auc',
+            scoring='recall',
             cv=5
         )
     )
@@ -1791,12 +1964,6 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
 
     melhores_hiperparametros = model.named_steps['bayessearchcv'].best_params_
     hiperparametros = pd.DataFrame([melhores_hiperparametros])
-
-    return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, hiperparametros
-
-def melhores_hiperpametros_modelo(melhores_hiperpametros):
-    # Acesse os hiperparâmetros
-    hiperparametros = melhores_hiperpametros
 
     # Crie um DataFrame a partir dos hiperparâmetros
     df = hiperparametros.reset_index(drop=True)
@@ -1827,8 +1994,8 @@ def melhores_hiperpametros_modelo(melhores_hiperpametros):
             {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
         ])
 
-    # Mostrando o DataFrame estilizado
-    return styled_df
+    return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, styled_df
+
 
 def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, n_splits):
 
@@ -2027,19 +2194,21 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
                 ColumnTransformer([
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
                 ]),
+                
                 XGBClassifier(
                     random_state=42, # Semente aleatória para reproducibilidade dos resultados
+                    tree_method = 'gpu_hist',
                     eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
                     objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
                     n_estimators = 100, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
                     max_depth = 8, # Profundidade máxima de cada árvore
-                    learning_rate = 0.031064809485107696, # Taxa de aprendizado - controla a contribuição de cada árvore
-                    reg_alpha = 0.8585155755799185, # Termo de regularização L1 (penalidade nos pesos)
-                    reg_lambda = 0.712089036230341, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
-                    gamma = 0.7190145932204617, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
-                    colsample_bytree = 0.8997767208035865, # Fração de características a serem consideradas ao construir cada árvore
-                    subsample = 0.6765419227639857, # Fração de amostras a serem usadas para treinar cada árvore
-                    scale_pos_weight = 5, # Peso das classes positivas em casos desequilibrados
+                    learning_rate = 0.03, # Taxa de aprendizado - controla a contribuição de cada árvore
+                    reg_alpha = 0.73, # Termo de regularização L1 (penalidade nos pesos)
+                    reg_lambda = 0.58, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+                    gamma = 0.96, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+                    colsample_bytree = 0.72, # Fração de características a serem consideradas ao construir cada árvore
+                    subsample = 0.78, # Fração de amostras a serem usadas para treinar cada árvore
+                    scale_pos_weight = 7, # Peso das classes positivas em casos desequilibrados
                     base_score = 0.5 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
                 )
             )
@@ -2118,7 +2287,7 @@ def modelo_corte_probabilidade(df_model, df_retorno_financeiro, target, x, y):
     imputer = simple_imputer(x)
     x = pd.DataFrame(imputer.transform(x), columns = x.columns)
     
-    list_threshold = [0.45, 0.50, 0.55]
+    list_threshold = [0.3, 0.4, 0.5, 0.6, 0.7]
     list_lucro = []
     for threshold in list_threshold:
         # Define o ColumnTransformer
@@ -2129,71 +2298,84 @@ def modelo_corte_probabilidade(df_model, df_retorno_financeiro, target, x, y):
         model = make_pipeline(
         preprocessor,
         XGBClassifier(
-            random_state=42, 
-            eval_metric='logloss', 
-            objective='binary:logistic', 
-            n_estimators = 100, 
-            max_depth = 8, 
-            learning_rate = 0.031064809485107696,
-            reg_alpha = 0.8585155755799185,
-            reg_lambda = 0.712089036230341,
-            gamma = 0.7190145932204617,
-            colsample_bytree = 0.8997767208035865,
-            subsample = 0.6765419227639857,
-            scale_pos_weight = 5,
-            base_score = threshold
+            random_state=42, # Semente aleatória para reproducibilidade dos resultados
+            tree_method = 'gpu_hist',
+            eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
+            objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
+            n_estimators = 100, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+            max_depth = 8, # Profundidade máxima de cada árvore
+            learning_rate = 0.03, # Taxa de aprendizado - controla a contribuição de cada árvore
+            reg_alpha = 0.73, # Termo de regularização L1 (penalidade nos pesos)
+            reg_lambda = 0.58, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+            gamma = 0.96, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+            colsample_bytree = 0.72, # Fração de características a serem consideradas ao construir cada árvore
+            subsample = 0.78, # Fração de amostras a serem usadas para treinar cada árvore
+            scale_pos_weight = 7, # Peso das classes positivas em casos desequilibrados
+            base_score = threshold # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
             )
         )
         
         model.fit(x, y)
 
         y_pred = model.predict(x)
-        lucro = retorno_financeiro(df_retorno_financeiro, target, y, y_pred)
+        lucro = retorno_financeiro(df_retorno_financeiro, target, y, y_pred)[0]
         list_lucro.append(lucro)
     
     corte_probabilidade = pd.DataFrame({'threshold':list_threshold, 'lucro':list_lucro})
     return corte_probabilidade
 
 
-def modelo_oficial(classificador, x, y):
-    # Define as colunas categóricas e numéricas
-    qualitativas_numericas = [column for column in x.columns if x[column].nunique() <= 5]
-    discretas = [column for column in x.columns if (x[column].nunique() > 5) and (x[column].nunique() <= 50)]
-    continuas = [column for column in x.columns if x[column].nunique() > 50]
+def modelo_oficial (classificador, x, y):
+    def simple_imputer(df_model):
+
+        df_aux = df_model.copy()
+        imputer = SimpleImputer(strategy = 'median')
+        imputer.fit(df_aux)
+
+        return imputer
+    
+    cols = list(x.columns)
+    imputer = simple_imputer(x)
+    x = pd.DataFrame(imputer.transform(x), columns = x.columns)
 
     # Define o ColumnTransformer
     preprocessor = ColumnTransformer([
-                ('qualitativas_numericas', make_pipeline(SimpleImputer(strategy='constant')), qualitativas_numericas),
-                ('discretas', make_pipeline(SimpleImputer(strategy='median')), discretas),
-                ('continuas', make_pipeline(SimpleImputer(strategy='median')), continuas)
-    ])
-    # Define o modelo de XGBoost com a otimização de hiperparâmetros via BayesSearch
+                ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+                ('scaler', make_pipeline(MinMaxScaler()), cols)
+            ])
+
     model = make_pipeline(
-        preprocessor,
+    preprocessor,
         XGBClassifier(
-            random_state=42, 
-            eval_metric='logloss', 
-            objective='binary:logistic', 
-            n_estimators = 15, 
-            max_depth = 7, 
-            learning_rate = 0.029858668143868672,
-            reg_alpha = 0.5255672768385259,
-            reg_lambda = 0.785388901339449,
-            gamma = 0.9600046132186582,
-            colsample_bytree = 0.7717015338451563,
-            subsample = 0.6928647954923324,
-            scale_pos_weight = 8,
-            base_score = 0.54
+        random_state=42, # Semente aleatória para reproducibilidade dos resultados
+        tree_method = 'gpu_hist', # Treino usando GPU
+        eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
+        objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
+        n_estimators = 100, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+        max_depth = 8, # Profundidade máxima de cada árvore
+        learning_rate = 0.03, # Taxa de aprendizado - controla a contribuição de cada árvore
+        reg_alpha = 0.73, # Termo de regularização L1 (penalidade nos pesos)
+        reg_lambda = 0.58, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+        gamma = 0.96, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+        colsample_bytree = 0.72, # Fração de características a serem consideradas ao construir cada árvore
+        subsample = 0.78, # Fração de amostras a serem usadas para treinar cada árvore
+        scale_pos_weight = 7, # Peso das classes positivas em casos desequilibrados
+        base_score = 0.3 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
         )
     )
 
-    # Treina o modelo
+    # Treina o modelo oficial
     model.fit(x, y)
+    salvar_modelo_pickle(model, 'models/clf_final.pkl')
 
-    y_pred_train = model.predict(x)
-    y_proba_train = model.predict_proba(x)
+def escoragem(x, y):
+    clf_final = carregar_modelo_pickle('models/clf_final.pkl')
 
-    return model, y_pred_train, y_proba_train
+    y_pred = clf_final.predict(x)
+    y_proba= clf_final.predict_proba(x)
+
+    return y_pred, y_proba
+    
 
 
 def salvar_modelo_pickle(modelo, caminho_arquivo):
@@ -2222,3 +2404,58 @@ def carregar_modelo_pickle(caminho_arquivo):
         modelo_carregado = pickle.load(arquivo)
     print(f"Modelo carregado de {caminho_arquivo}")
     return modelo_carregado
+
+
+def calibracao_probabilidade():
+
+    # Modelo de Calibração
+    calibrated_clf = CalibratedClassifierCV(best_clf_train, cv=5, method='isotonic')
+    calibrated_clf.fit(x_train, y_train)
+
+    y_predict_proba_ajustada_train_best_clf = calibrated_clf.predict_proba(x_train)
+    y_predict_proba_ajustada_test_best_clf = calibrated_clf.predict_proba(x_test)
+
+    predict_proba_train = pd.DataFrame(y_predict_proba_train_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_test = pd.DataFrame(y_predict_proba_test_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+
+    predict_proba_ajustada_train = pd.DataFrame(y_predict_proba_ajustada_train_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_ajustada_test = pd.DataFrame(y_predict_proba_ajustada_test_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+
+    # Definição das Probabilidades
+
+    probabilities_train = predict_proba_train['predict_proba_1'] # Obtenha as probabilidades previstas
+    prob_true_train, prob_pred_train = calibration_curve(y_train, probabilities_train, n_bins=10) # Calcule a curva de calibração
+    brier_score_train = brier_score_loss(y_train, probabilities_train) # Calcule o Brier Score (uma métrica de calibração)
+
+    probabilities_test = predict_proba_test['predict_proba_1'] # Obtenha as probabilidades previstas
+    prob_true_test, prob_pred_test = calibration_curve(y_test, probabilities_test, n_bins=10) # Calcule a curva de calibração
+    brier_score_test = brier_score_loss(y_test, probabilities_test) # Calcule o Brier Score (uma métrica de calibração)
+
+    probabilities_ajustada_train = predict_proba_ajustada_train['predict_proba_1'] # Obtenha as probabilidades previstas
+    prob_true_ajustada_train, prob_pred_ajustada_train = calibration_curve(y_train, probabilities_ajustada_train, n_bins=10) # Calcule a curva de calibração
+    brier_score_ajustada_train = brier_score_loss(y_train, probabilities_ajustada_train) # Calcule o Brier Score (uma métrica de calibração)
+
+    probabilities_ajustada_test = predict_proba_ajustada_test['predict_proba_1'] # Obtenha as probabilidades previstas
+    prob_true_ajustada_test, prob_pred_ajustada_test = calibration_curve(y_test, probabilities_ajustada_test, n_bins=10) # Calcule a curva de calibração
+    brier_score_ajustada_test = brier_score_loss(y_test, probabilities_ajustada_test) # Calcule o Brier Score (uma métrica de calibração)
+
+    y_predict_ajustada_train_best_clf = calibrated_clf.predict(x_train)
+    y_predict_ajustada_test_best_clf = calibrated_clf.predict(x_test)
+
+    y_predict_proba_ajustada_train_best_clf = calibrated_clf.predict_proba(x_train)
+    y_predict_proba_ajustada_test_best_clf = calibrated_clf.predict_proba(x_test)
+
+    metricas_ajustada_best_clf = metricas_classificacao('Bayes Search + XGBoost', y_train, y_predict_ajustada_train_best_clf, y_test, y_predict_ajustada_test_best_clf, y_predict_proba_ajustada_train_best_clf, y_predict_proba_ajustada_test_best_clf)
+
+    # Plote a curva de calibração
+    plt.figure(figsize=(8, 8))
+    plt.plot(prob_pred_train, prob_true_train, marker='o', label='Probability Curve Before Calibration- Train', color = 'blue')
+    plt.plot(prob_pred_test, prob_true_test, marker='o', label='Probability Curve Before Calibration - Test', color = 'red')
+    plt.plot(prob_pred_ajustada_train, prob_true_ajustada_train, marker='o', label='Probability Curve After Calibration - Train', color = 'green')
+    plt.plot(prob_pred_ajustada_test, prob_true_ajustada_test, marker='o', label='Probability Curve After Calibration - Test', color = 'purple')
+    plt.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Perfectly Calibrated')
+    plt.title(f'Calibration Curve')
+    plt.xlabel('Mean Predicted Probability')
+    plt.ylabel('Fraction of Positives')
+    plt.legend()
+    plt.show()
