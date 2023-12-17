@@ -740,7 +740,7 @@ def auc_ks_juntos(classificador, target,
     roc_legend_labels = [
         {'label': 'Train ROC Curve (AUC = {:.2f})'.format(auc_train), 'color': 'blue', 'marker': 'o'},
         {'label': 'Test ROC Curve (AUC = {:.2f})'.format(auc_test), 'color': 'red', 'marker': 's'},
-        {'label': 'Test ROC Curve (AUC = {:.2f})'.format(auc_test), 'color': 'green', 'marker': '^'}
+        {'label': 'CV ROC Curve (AUC = {:.2f})'.format(auc_test), 'color': 'green', 'marker': '^'}
     ]
 
     # Criar marcadores personalizados para a legenda ROC
@@ -993,7 +993,7 @@ def remove_features_feature_importance(target, df, class_weight, threshold):
     x, y = separa_feature_target(target, df)
 
     # Criar o modelo de Random Forest
-    model = RandomForestClassifier(random_state=42, criterion='log_loss', n_estimators=20, class_weight={0:1, 1:class_weight})
+    model = RandomForestClassifier(random_state=42, criterion='entropy', n_estimators=20, class_weight={0:1, 1:class_weight})
 
     # Treinar o modelo
     model.fit(x, y)
@@ -1208,9 +1208,23 @@ def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_prob
     roc_auc = roc_auc_score(y['loan_status'], predict_proba['predict_proba_1'])
     fpr, tpr, thresholds = roc_curve(y['loan_status'], predict_proba['predict_proba_1'])
     ks = max(tpr - fpr)
-    total, retorno_financeiro_por_caso = retorno_financeiro(df, 'loan_status', y, y_predict)
+    total, retorno_financeiro_por_caso, valor_de_exposicao_total, return_on_portfolio = retorno_financeiro(df, 'loan_status', y, y_predict)
     total = 'R$' + str(int(round(total/1000000, 0))) + ' MM'
-    metricas_finais = pd.DataFrame({'Acuracia': accuracy, 'Precisao': precision, 'Recall': recall, 'F1-Score': f1, 'AUC': roc_auc, 'KS': ks, 'Etapa': 'Amostra Final', 'Classificador': classificador, 'Retorno Financeiro': total}, index=[0])
+    valor_de_exposicao_total = 'R$' + str(float(round(valor_de_exposicao_total/1000000000, 3))) + 'B'
+    rocp = str(return_on_portfolio) + '%'
+    metricas_finais = pd.DataFrame({
+        'Acuracia': accuracy, 
+        'Precisao': precision, 
+        'Recall': recall, 
+        'F1-Score': f1, 
+        'AUC': roc_auc, 
+        'KS': ks, 
+        'Etapa': 'Amostra Final', 
+        'Classificador': classificador, 
+        'Valor Total de Exposição': valor_de_exposicao_total,
+        'Retorno Financeiro': total,
+        'Return on Credit Portfolio (ROCP)': rocp
+    }, index=[0])
 
     df = metricas_finais.reset_index(drop=True)
     df = df.round(2)
@@ -1271,8 +1285,10 @@ def retorno_financeiro(df, target, y, y_predict):
                         0 # Não ganho nada
     )))
 
-
+    valor_de_exposicao_total = int(df_aux['loan_amnt'].sum())
     retorno_financeiro = int(df_aux['retorno_financeiro'].sum())
+    valor_conquistado = valor_de_exposicao_total + retorno_financeiro,
+    return_on_portfolio = round((retorno_financeiro/valor_de_exposicao_total)*100, 2)
     retorno_financeiro_por_caso = df_aux.groupby('caso', as_index = False)['retorno_financeiro'].sum().sort_values(by = 'retorno_financeiro', ascending = False)
 
     # Crie um DataFrame a partir dos hiperparâmetros
@@ -1304,7 +1320,7 @@ def retorno_financeiro(df, target, y, y_predict):
             {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
         ])
 
-    return retorno_financeiro, styled_df
+    return retorno_financeiro, styled_df, valor_de_exposicao_total, return_on_portfolio
 
 
 
@@ -1376,10 +1392,6 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
     x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
     x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
 
-    # # Ajuste automático do class_weight para o MLPClassifier
-    # if classificador == 'Multilayer Perceptron':
-    #     class_weight = get_class_weight(y_train, target_class=1)
-
     # Define as colunas categóricas e numéricas
     models = {
         'Regressão Logística': make_pipeline(
@@ -1407,14 +1419,14 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
                 ('scaler', make_pipeline(MinMaxScaler()), cols)
             ]),
-            KNeighborsClassifier(n_neighbors=5)  # Escolha o número adequado de vizinhos
+            KNeighborsClassifier(n_neighbors=3)  # Escolha o número adequado de vizinhos
         ),
         'SVM': make_pipeline(
             ColumnTransformer([
                 ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
                 ('scaler', make_pipeline(MinMaxScaler()), cols)
             ]),
-            SVC(kernel='linear', class_weight={0: 1, 1: class_weight}, random_state=42)
+            SVC(kernel='linear', class_weight={0: 1, 1: class_weight}, cache_size=1000, probability=True, random_state=42)
         ),
         'Random Forest': make_pipeline(
             ColumnTransformer([
@@ -1422,7 +1434,7 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
             ]),
         RandomForestClassifier(
             random_state=42,            # Semente aleatória para reproducibilidade dos resultados
-            criterion='log_loss',       # Critério usado para medir a qualidade de uma divisão
+            criterion='entropy',       # Critério usado para medir a qualidade de uma divisão
             n_estimators=50,           # Número de árvores na floresta (equivalente ao n_estimators no XGBoost)
             max_depth = 6,                # Profundidade máxima de cada árvore
             class_weight={0:1, 1:class_weight},  # Peso das classes em casos desequilibrados
@@ -1453,23 +1465,23 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
             base_score=0.5              # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
             )
         )
-    #     ,
-    #     'Multilayer Perceptron': make_pipeline(
-    #         ColumnTransformer([
-    #             ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
-    #             ('scaler', make_pipeline(MinMaxScaler()), cols)
-    #         ]),
-    #     MLPClassifier(
-    #         hidden_layer_sizes=(100, ),  # Número de camadas ocultas
-    #         activation='relu',           # Função de ativação
-    #         solver='adam',               # Otimizador
-    #         max_iter=200,                # Número máximo de iterações
-    #         random_state=42,
-    #         class_weight={0: 1, 1: class_weight},  # Peso para classe minoritária
-    #         alpha=0.0001,  # Exemplo de ajuste do termo de regularização
-    #         learning_rate='adaptive'  # Exemplo de ajuste da taxa de aprendizado
-    #     )
-    # )
+        # 'MLP': make_pipeline(
+        #     ColumnTransformer([
+        #         ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+        #         ('scaler', make_pipeline(MinMaxScaler()), cols)
+        #     ]),
+        #     MLPClassifier(
+        #         hidden_layer_sizes=(100,),  # Número de neurônios em cada camada oculta, ajuste conforme necessário
+        #         activation='relu',  # Função de ativação para as camadas ocultas
+        #         solver='adam',  # Algoritmo de otimização
+        #         alpha=0.0001,  # Termo de regularização
+        #         batch_size='auto',  # Tamanho do lote para otimização em lote, 'auto' ajusta automaticamente
+        #         learning_rate='constant',  # Taxa de aprendizado
+        #         learning_rate_init=0.001,  # Taxa de aprendizado inicial
+        #         max_iter=200,  # Número máximo de iterações
+        #         random_state=42
+        #     )
+        # )
     }
 
     if classificador in models:
@@ -1558,7 +1570,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
 
         return df
 
-    def taxa_de_bad_por_categoria(df, tipo):
+    def target_encoder_bad_rate(df, tipo):
         categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
         df_aux_2 = df.copy()
         if tipo == 'Criação':
@@ -1568,38 +1580,18 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                 bad = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 1].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_bad'}, axis = 1)
                 df_aux = good.merge(bad, on = f'{cat}', how = 'left')
                 df_aux['qt_total'] = df_aux['qt_good'] + df_aux['qt_bad']
-                df_aux[f'bad_rate_{cat}'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
-                df_aux[f'bad_rate_{cat}'] = df_aux[f'bad_rate_{cat}'].apply(lambda x:float(x))
-                df_aux = df_aux[[f'{cat}', f'bad_rate_{cat}']].drop_duplicates().sort_values(by = f'bad_rate_{cat}', ascending = True)
-                df_aux.to_csv(f'features/bad_rate_{cat}.csv', index = False)
-                df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'bad_rate_{cat}']], on = f'{cat}', how = 'left')
+                df_aux[f'{cat}_enc'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
+                df_aux[f'{cat}_enc'] = df_aux[f'{cat}_enc'].apply(lambda x:float(x))
+                df_aux = df_aux[[f'{cat}', f'{cat}_enc']].drop_duplicates().sort_values(by = f'{cat}_enc', ascending = True)
+                df_aux.to_csv(f'features/{cat}_enc.csv', index = False)
+                df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'{cat}_enc']], on = f'{cat}', how = 'left')
+                df_aux_2.drop(f'{cat}', axis = 1, inplace = True)
         else:
             for cat in categoricas:
-                ft = pd.read_csv(f'features/bad_rate_{cat}.csv')
-                replace_dict = dict(zip(ft[f'{cat}'], ft[f'bad_rate_{cat}']))
-                df_aux_2[f'bad_rate_{cat}'] = df_aux_2[f'{cat}'].replace(replace_dict)
-
-        return df_aux_2
-
-    def media_categoria_variavel_quantitativa(df, tipo):
-        df_aux_2 = df.copy()
-        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'delinq_2yrs', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
-        quantitativas = ['loan_amnt', 'int_rate', 'annual_inc', 'annual_income_commitment_rate', 'tot_cur_bal', 'total_rev_hi_lim', 'revol_util', 'open_acc', 'total_acc']
-        if tipo == 'Criação':
-            for cat in categoricas:
-                for quant in quantitativas:
-                    df_aux = df[[f'{cat}', f'{quant}']].copy()
-                    df_aux = pd.DataFrame(df_aux.groupby(f'{cat}', as_index = False)[f'{quant}'].mean()).rename({f'{quant}':f'mean_{cat}_{quant}'}, axis = 1)
-                    df_aux[f'mean_{cat}_{quant}'] = df_aux[f'mean_{cat}_{quant}'].apply(lambda x:float(x))
-                    df_aux[[f'{cat}', f'mean_{cat}_{quant}']].drop_duplicates().sort_values(by = f'mean_{cat}_{quant}', ascending = True)
-                    df_aux.to_csv(f'features/mean_{cat}_{quant}.csv', index = False)
-                    df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'mean_{cat}_{quant}']], on = f'{cat}', how = 'left')
-        else:
-            for cat in categoricas:
-                for quant in quantitativas:
-                    ft = pd.read_csv(f'features/mean_{cat}_{quant}.csv')
-                    replace_dict = dict(zip(ft[f'{cat}'], ft[f'mean_{cat}_{quant}']))
-                    df_aux_2[f'mean_{cat}_{quant}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+                ft = pd.read_csv(f'features/{cat}_enc.csv')
+                replace_dict = dict(zip(ft[f'{cat}'], ft[f'{cat}_enc']))
+                df_aux_2[f'{cat}_enc'] = df_aux_2[f'{cat}'].replace(replace_dict)
+                df_aux_2.drop(f'{cat}', axis = 1, inplace = True)
 
         return df_aux_2
 
@@ -1651,8 +1643,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
         df_train['issue_d'] = n_meses_produto_credito_atual(df_train)
         df_train['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_train)
         df_train = formato_features_binarias(df_train)
-        df_train = taxa_de_bad_por_categoria(df_train, 'escoragem')
-        df_train = media_categoria_variavel_quantitativa(df_train, 'escoragem')
+        df_train = target_encoder_bad_rate(df_train, 'escoragem')
 
         df_test['emp_length'] = numero_de_anos_emprego_atual(df_test)
         df_test['pub_rec'] = numero_de_registros_negativos(df_test)
@@ -1662,8 +1653,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
         df_test['issue_d'] = n_meses_produto_credito_atual(df_test)
         df_test['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_test)
         df_test = formato_features_binarias(df_test)
-        df_test = taxa_de_bad_por_categoria(df_test, 'escoragem')
-        df_test = media_categoria_variavel_quantitativa(df_test, 'escoragem')
+        df_test = target_encoder_bad_rate(df_test, 'escoragem')
 
         # Filtragem das Features que passaram no Feature Selection
         df_train = df_train[features_selected]
@@ -1706,7 +1696,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
                     ('scaler', make_pipeline(MinMaxScaler()), cols)
                 ]),
-                KNeighborsClassifier(n_neighbors=5)  # Escolha o número adequado de vizinhos
+                KNeighborsClassifier(n_neighbors=3)  # Escolha o número adequado de vizinhos
             ),
             'SVM': make_pipeline(
                 ColumnTransformer([
@@ -1715,6 +1705,8 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                 ]),
                 SVC(kernel='linear', 
                     class_weight={0: 1, 1: class_weight}, 
+                    cache_size=1000,
+                    probability=True,
                     random_state=42
                     )
             ),
@@ -1724,7 +1716,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                 ]),
             RandomForestClassifier(
                 random_state=42,            # Semente aleatória para reproducibilidade dos resultados
-                criterion='log_loss',       # Critério usado para medir a qualidade de uma divisão
+                criterion='entropy',       # Critério usado para medir a qualidade de uma divisão
                 n_estimators=50,           # Número de árvores na floresta (equivalente ao n_estimators no XGBoost)
                 max_depth = 6,                # Profundidade máxima de cada árvore
                 class_weight={0:1, 1:class_weight},  # Peso das classes em casos desequilibrados
@@ -1756,6 +1748,23 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                 base_score=0.5              # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
                 )
             )
+            # 'MLP': make_pipeline(
+            #     ColumnTransformer([
+            #         ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
+            #         ('scaler', make_pipeline(MinMaxScaler()), cols)
+            #     ]),
+            #     MLPClassifier(
+            #         hidden_layer_sizes=(100,),  # Número de neurônios em cada camada oculta, ajuste conforme necessário
+            #         activation='relu',  # Função de ativação para as camadas ocultas
+            #         solver='adam',  # Algoritmo de otimização
+            #         alpha=0.0001,  # Termo de regularização
+            #         batch_size='auto',  # Tamanho do lote para otimização em lote, 'auto' ajusta automaticamente
+            #         learning_rate='constant',  # Taxa de aprendizado
+            #         learning_rate_init=0.001,  # Taxa de aprendizado inicial
+            #         max_iter=200,  # Número máximo de iterações
+            #         random_state=42
+            #     )
+            # )
         }
 
         if classificador in models:
@@ -1908,7 +1917,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
 #     return best_model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, best_params
 
 
-def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
+def otimizacao(classificador, x_train, y_train, x_test, y_test):
     def simple_imputer(df):
 
         df_aux = df.copy()
@@ -1943,7 +1952,7 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
                 'colsample_bytree':(0.5, 1), # Porcentagem de Colunas utilizada para a amostragem aleatória durante a criação das Árvores
                 'subsample':(0.5, 1), # Porcentagem de Linhas utilizada para a amostragem aleatória durante a criação das Árvores
                 'scale_pos_weight':(4, 5, 6, 7, 8), # Peso atribuído a classe positiva, aumentando a importância da classe minoritária
-                #'base_score':(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) # Threshold de Probabilidade de decisão do modelo
+                #'base_score':(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9) # Threshold de Probabilidade de decisão do modelo
             },
             n_iter=10,
             random_state=42,
@@ -1964,6 +1973,14 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
 
     melhores_hiperparametros = model.named_steps['bayessearchcv'].best_params_
     hiperparametros = pd.DataFrame([melhores_hiperparametros])
+
+    best_hiperpams = []
+    for chave, valor in melhores_hiperparametros.items():
+        best_hiperpams.append([chave, valor])
+
+    pivot = pd.DataFrame(best_hiperpams).T
+    pivot.columns = pivot.iloc[0]
+    pivot = pivot.drop(0)
 
     # Crie um DataFrame a partir dos hiperparâmetros
     df = hiperparametros.reset_index(drop=True)
@@ -1994,10 +2011,9 @@ def modelo_otimizado(classificador, x_train, y_train, x_test, y_test):
             {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
         ])
 
-    return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, styled_df
+    return model, y_pred_train, y_pred_test, y_proba_train, y_proba_test, styled_df, pivot
 
-
-def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, n_splits):
+def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, n_splits, best_hiperpams):
 
     def numero_de_anos_emprego_atual(df):
         df['emp_length'] = (df['emp_length'].replace({'< 1 year':0, '1 year':1, '2 years':2, '3 years':3, '4 years':4, '5 years':5, '6 years':6, '7 years':7, '8 years':8, '9 years':9,'10+ years':10}).fillna(0))
@@ -2068,7 +2084,7 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
 
         return df
 
-    def taxa_de_bad_por_categoria(df, tipo):
+    def target_encoder_bad_rate(df, tipo):
         categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
         df_aux_2 = df.copy()
         if tipo == 'Criação':
@@ -2078,40 +2094,21 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
                 bad = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 1].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_bad'}, axis = 1)
                 df_aux = good.merge(bad, on = f'{cat}', how = 'left')
                 df_aux['qt_total'] = df_aux['qt_good'] + df_aux['qt_bad']
-                df_aux[f'bad_rate_{cat}'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
-                df_aux[f'bad_rate_{cat}'] = df_aux[f'bad_rate_{cat}'].apply(lambda x:float(x))
-                df_aux = df_aux[[f'{cat}', f'bad_rate_{cat}']].drop_duplicates().sort_values(by = f'bad_rate_{cat}', ascending = True)
-                df_aux.to_csv(f'features/bad_rate_{cat}.csv', index = False)
-                df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'bad_rate_{cat}']], on = f'{cat}', how = 'left')
+                df_aux[f'{cat}_enc'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
+                df_aux[f'{cat}_enc'] = df_aux[f'{cat}_enc'].apply(lambda x:float(x))
+                df_aux = df_aux[[f'{cat}', f'{cat}_enc']].drop_duplicates().sort_values(by = f'{cat}_enc', ascending = True)
+                df_aux.to_csv(f'features/{cat}_enc.csv', index = False)
+                df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'{cat}_enc']], on = f'{cat}', how = 'left')
+                df_aux_2.drop(f'{cat}', axis = 1, inplace = True)
         else:
             for cat in categoricas:
-                ft = pd.read_csv(f'features/bad_rate_{cat}.csv')
-                replace_dict = dict(zip(ft[f'{cat}'], ft[f'bad_rate_{cat}']))
-                df_aux_2[f'bad_rate_{cat}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+                ft = pd.read_csv(f'features/{cat}_enc.csv')
+                replace_dict = dict(zip(ft[f'{cat}'], ft[f'{cat}_enc']))
+                df_aux_2[f'{cat}_enc'] = df_aux_2[f'{cat}'].replace(replace_dict)
+                df_aux_2.drop(f'{cat}', axis = 1, inplace = True)
 
         return df_aux_2
 
-    def media_categoria_variavel_quantitativa(df, tipo):
-        df_aux_2 = df.copy()
-        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'delinq_2yrs', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
-        quantitativas = ['loan_amnt', 'int_rate', 'annual_inc', 'annual_income_commitment_rate', 'tot_cur_bal', 'total_rev_hi_lim', 'revol_util', 'open_acc', 'total_acc']
-        if tipo == 'Criação':
-            for cat in categoricas:
-                for quant in quantitativas:
-                    df_aux = df[[f'{cat}', f'{quant}']].copy()
-                    df_aux = pd.DataFrame(df_aux.groupby(f'{cat}', as_index = False)[f'{quant}'].mean()).rename({f'{quant}':f'mean_{cat}_{quant}'}, axis = 1)
-                    df_aux[f'mean_{cat}_{quant}'] = df_aux[f'mean_{cat}_{quant}'].apply(lambda x:float(x))
-                    df_aux[[f'{cat}', f'mean_{cat}_{quant}']].drop_duplicates().sort_values(by = f'mean_{cat}_{quant}', ascending = True)
-                    df_aux.to_csv(f'features/mean_{cat}_{quant}.csv', index = False)
-                    df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'mean_{cat}_{quant}']], on = f'{cat}', how = 'left')
-        else:
-            for cat in categoricas:
-                for quant in quantitativas:
-                    ft = pd.read_csv(f'features/mean_{cat}_{quant}.csv')
-                    replace_dict = dict(zip(ft[f'{cat}'], ft[f'mean_{cat}_{quant}']))
-                    df_aux_2[f'mean_{cat}_{quant}'] = df_aux_2[f'{cat}'].replace(replace_dict)
-
-        return df_aux_2
 
 
     def simple_imputer(df):
@@ -2161,8 +2158,7 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
         df_train['issue_d'] = n_meses_produto_credito_atual(df_train)
         df_train['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_train)
         df_train = formato_features_binarias(df_train)
-        df_train = taxa_de_bad_por_categoria(df_train, 'escoragem')
-        df_train = media_categoria_variavel_quantitativa(df_train, 'escoragem')
+        df_train = target_encoder_bad_rate(df_train, 'escoragem')
 
         df_test['emp_length'] = numero_de_anos_emprego_atual(df_test)
         df_test['pub_rec'] = numero_de_registros_negativos(df_test)
@@ -2172,8 +2168,7 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
         df_test['issue_d'] = n_meses_produto_credito_atual(df_test)
         df_test['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_test)
         df_test = formato_features_binarias(df_test)
-        df_test = taxa_de_bad_por_categoria(df_test, 'escoragem')
-        df_test = media_categoria_variavel_quantitativa(df_test, 'escoragem')
+        df_test = target_encoder_bad_rate(df_test, 'escoragem')
 
         # Filtragem das Features que passaram no Feature Selection
         df_train = df_train[features_selected]
@@ -2189,25 +2184,54 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
         x_train = pd.DataFrame(imputer.transform(x_train), columns = x_train.columns)
         x_test = pd.DataFrame(imputer.transform(x_test), columns = x_test.columns)
 
+
+        # Melhores Hiperparâmetros
+        melhores_hiperparametros = best_hiperpams
+        colsample_bytree = melhores_hiperparametros['colsample_bytree'][1]
+        gamma = melhores_hiperparametros['gamma'][1]
+        learning_rate = melhores_hiperparametros['learning_rate'][1]
+        max_depth = melhores_hiperparametros['max_depth'][1]
+        n_estimators = melhores_hiperparametros['n_estimators'][1]
+        reg_alpha = melhores_hiperparametros['reg_alpha'][1]
+        reg_lambda = melhores_hiperparametros['reg_lambda'][1]
+        scale_pos_weight = melhores_hiperparametros['scale_pos_weight'][1]
+        subsample = melhores_hiperparametros['subsample'][1]
+
         # Define as colunas categóricas e numéricas
         model = make_pipeline(
                 ColumnTransformer([
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols)
                 ]),
                 
-                XGBClassifier(
+                # XGBClassifier(
+                #     random_state=42, # Semente aleatória para reproducibilidade dos resultados
+                #     tree_method = 'gpu_hist',
+                #     eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
+                #     objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
+                #     n_estimators = n_estimators, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+                #     max_depth = max_depth, # Profundidade máxima de cada árvore
+                #     learning_rate = learning_rate, # Taxa de aprendizado - controla a contribuição de cada árvore
+                #     reg_alpha = reg_alpha, # Termo de regularização L1 (penalidade nos pesos)
+                #     reg_lambda = reg_lambda, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+                #     gamma = gamma, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+                #     colsample_bytree = colsample_bytree, # Fração de características a serem consideradas ao construir cada árvore
+                #     subsample = subsample, # Fração de amostras a serem usadas para treinar cada árvore
+                #     scale_pos_weight = scale_pos_weight, # Peso das classes positivas em casos desequilibrados
+                #     base_score = 0.5 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
+                # )
+            XGBClassifier(
                     random_state=42, # Semente aleatória para reproducibilidade dos resultados
-                    tree_method = 'gpu_hist',
+                    tree_method = 'gpu_hist', # Treino usando GPU
                     eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
                     objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
-                    n_estimators = 100, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+                    n_estimators = 99, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
                     max_depth = 8, # Profundidade máxima de cada árvore
-                    learning_rate = 0.03, # Taxa de aprendizado - controla a contribuição de cada árvore
-                    reg_alpha = 0.73, # Termo de regularização L1 (penalidade nos pesos)
-                    reg_lambda = 0.58, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
-                    gamma = 0.96, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
-                    colsample_bytree = 0.72, # Fração de características a serem consideradas ao construir cada árvore
-                    subsample = 0.78, # Fração de amostras a serem usadas para treinar cada árvore
+                    learning_rate = 0.03209718317105407, # Taxa de aprendizado - controla a contribuição de cada árvore
+                    reg_alpha = 0.7268326719031495, # Termo de regularização L1 (penalidade nos pesos)
+                    reg_lambda = 0.5777240270252717, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+                    gamma = 0.9593612608346885, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+                    colsample_bytree = 0.7224162561505759, # Fração de características a serem consideradas ao construir cada árvore
+                    subsample = 0.7786702115169006, # Fração de amostras a serem usadas para treinar cada árvore
                     scale_pos_weight = 7, # Peso das classes positivas em casos desequilibrados
                     base_score = 0.5 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
                 )
@@ -2287,7 +2311,7 @@ def modelo_corte_probabilidade(df_model, df_retorno_financeiro, target, x, y):
     imputer = simple_imputer(x)
     x = pd.DataFrame(imputer.transform(x), columns = x.columns)
     
-    list_threshold = [0.3, 0.4, 0.5, 0.6, 0.7]
+    list_threshold = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     list_lucro = []
     for threshold in list_threshold:
         # Define o ColumnTransformer
@@ -2295,37 +2319,54 @@ def modelo_corte_probabilidade(df_model, df_retorno_financeiro, target, x, y):
                     ('imputer', make_pipeline(SimpleImputer(strategy='median')), cols),
                     ('scaler', make_pipeline(MinMaxScaler()), cols)
                 ])
+
         model = make_pipeline(
         preprocessor,
-        XGBClassifier(
+            XGBClassifier(
             random_state=42, # Semente aleatória para reproducibilidade dos resultados
-            tree_method = 'gpu_hist',
+            tree_method = 'gpu_hist', # Treino usando GPU
             eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
             objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
-            n_estimators = 100, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+            n_estimators = 99, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
             max_depth = 8, # Profundidade máxima de cada árvore
-            learning_rate = 0.03, # Taxa de aprendizado - controla a contribuição de cada árvore
-            reg_alpha = 0.73, # Termo de regularização L1 (penalidade nos pesos)
-            reg_lambda = 0.58, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
-            gamma = 0.96, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
-            colsample_bytree = 0.72, # Fração de características a serem consideradas ao construir cada árvore
-            subsample = 0.78, # Fração de amostras a serem usadas para treinar cada árvore
+            learning_rate = 0.03209718317105407, # Taxa de aprendizado - controla a contribuição de cada árvore
+            reg_alpha = 0.7268326719031495, # Termo de regularização L1 (penalidade nos pesos)
+            reg_lambda = 0.5777240270252717, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+            gamma = 0.9593612608346885, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+            colsample_bytree = 0.7224162561505759, # Fração de características a serem consideradas ao construir cada árvore
+            subsample = 0.7786702115169006, # Fração de amostras a serem usadas para treinar cada árvore
             scale_pos_weight = 7, # Peso das classes positivas em casos desequilibrados
-            base_score = threshold # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
+            base_score = 0.5 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
             )
         )
         
         model.fit(x, y)
 
         y_pred = model.predict(x)
+        y_predict_proba = model.predict_proba(x)
+
+        teste_threshold = pd.DataFrame({'y_predict':y_pred, 'Proba Good':y_predict_proba[:, 0]})
+        teste_threshold['y_predict_threshold'] = np.where(teste_threshold['Proba Good'] <= threshold, 1, 0)
+        y_pred = teste_threshold['y_predict_threshold'].values
+
         lucro = retorno_financeiro(df_retorno_financeiro, target, y, y_pred)[0]
         list_lucro.append(lucro)
     
     corte_probabilidade = pd.DataFrame({'threshold':list_threshold, 'lucro':list_lucro})
+
+
+    # teste_threshold = pd.DataFrame({'y_true':y_test['loan_status'].values, 'y_predict_test':y_predict_test_otimizado, 'Proba Good':y_proba_test_otimizado[:, 0], 'Proba Bad':y_proba_test_otimizado[:, 1]})
+    # teste_threshold['y_predict_threshold'] = np.where(teste_threshold['Proba Good'] <= 0.4, 1, 0)
+
+
+    # display(teste_threshold.groupby('y_true', as_index = False)['Proba Good'].count())
+    # display(teste_threshold.groupby('y_predict_test', as_index = False)['Proba Good'].count())
+    # display(teste_threshold.groupby('y_predict_threshold', as_index = False)['Proba Good'].count())
     return corte_probabilidade
 
 
-def modelo_oficial (classificador, x, y):
+
+def modelo_oficial(classificador, x, y):
     def simple_imputer(df_model):
 
         df_aux = df_model.copy()
@@ -2351,16 +2392,16 @@ def modelo_oficial (classificador, x, y):
         tree_method = 'gpu_hist', # Treino usando GPU
         eval_metric='logloss', # Métrica de avaliação durante o treinamento, 'logloss' é comum para problemas de classificação binária
         objective='binary:logistic', # Define o objetivo do modelo, 'binary:logistic' para classificação binária
-        n_estimators = 100, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
+        n_estimators = 99, # Número de árvores no modelo (equivalente ao n_estimators na Random Forest)
         max_depth = 8, # Profundidade máxima de cada árvore
-        learning_rate = 0.03, # Taxa de aprendizado - controla a contribuição de cada árvore
-        reg_alpha = 0.73, # Termo de regularização L1 (penalidade nos pesos)
-        reg_lambda = 0.58, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
-        gamma = 0.96, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
-        colsample_bytree = 0.72, # Fração de características a serem consideradas ao construir cada árvore
-        subsample = 0.78, # Fração de amostras a serem usadas para treinar cada árvore
+        learning_rate = 0.03209718317105407, # Taxa de aprendizado - controla a contribuição de cada árvore
+        reg_alpha = 0.7268326719031495, # Termo de regularização L1 (penalidade nos pesos)
+        reg_lambda = 0.5777240270252717, # Termo de regularização L2 (penalidade nos quadrados dos pesos)
+        gamma = 0.9593612608346885, # Controle de poda da árvore, maior gamma leva a menos crescimento da árvore
+        colsample_bytree = 0.7224162561505759, # Fração de características a serem consideradas ao construir cada árvore
+        subsample = 0.7786702115169006, # Fração de amostras a serem usadas para treinar cada árvore
         scale_pos_weight = 7, # Peso das classes positivas em casos desequilibrados
-        base_score = 0.3 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
+        base_score = 0.5 # Threshold de Probabilidade de Decisão do Classificador (geralmente é 0.5 para problemas de classificação binária)
         )
     )
 
@@ -2373,9 +2414,11 @@ def escoragem(x, y):
 
     y_pred = clf_final.predict(x)
     y_proba= clf_final.predict_proba(x)
+    teste_threshold = pd.DataFrame({'y_predict':y_pred, 'Proba Good':y_proba[:, 0]})
+    teste_threshold['y_predict_threshold'] = np.where(teste_threshold['Proba Good'] <= 0.4, 1, 0)
+    y_pred = teste_threshold['y_predict_threshold'].values
 
     return y_pred, y_proba
-    
 
 
 def salvar_modelo_pickle(modelo, caminho_arquivo):
@@ -2406,20 +2449,22 @@ def carregar_modelo_pickle(caminho_arquivo):
     return modelo_carregado
 
 
-def calibracao_probabilidade():
+def calibracao_probabilidade():  
+    # Modelo Otimizado
+    model_otimizado, y_predict_train_otimizado, y_predict_test_otimizado, y_predict_proba_train_otimizado, y_predict_proba_test_otimizado = modelo_otimizado('Bayes Search + Threshold Proba + XGBoost', x_train, y_train, x_test, y_test)
 
     # Modelo de Calibração
-    calibrated_clf = CalibratedClassifierCV(best_clf_train, cv=5, method='isotonic')
+    calibrated_clf = CalibratedClassifierCV(model_otimizado, cv=5, method='isotonic')
     calibrated_clf.fit(x_train, y_train)
 
-    y_predict_proba_ajustada_train_best_clf = calibrated_clf.predict_proba(x_train)
-    y_predict_proba_ajustada_test_best_clf = calibrated_clf.predict_proba(x_test)
+    y_predict_proba_ajustada_train = calibrated_clf.predict_proba(x_train)
+    y_predict_proba_ajustada_test = calibrated_clf.predict_proba(x_test)
 
-    predict_proba_train = pd.DataFrame(y_predict_proba_train_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
-    predict_proba_test = pd.DataFrame(y_predict_proba_test_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_train = pd.DataFrame(y_predict_proba_train_otimizado.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_test = pd.DataFrame(y_predict_proba_test_otimizado.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
 
-    predict_proba_ajustada_train = pd.DataFrame(y_predict_proba_ajustada_train_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
-    predict_proba_ajustada_test = pd.DataFrame(y_predict_proba_ajustada_test_best_clf.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_ajustada_train = pd.DataFrame(y_predict_proba_ajustada_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
+    predict_proba_ajustada_test = pd.DataFrame(y_predict_proba_ajustada_test.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
 
     # Definição das Probabilidades
 
@@ -2445,7 +2490,21 @@ def calibracao_probabilidade():
     y_predict_proba_ajustada_train_best_clf = calibrated_clf.predict_proba(x_train)
     y_predict_proba_ajustada_test_best_clf = calibrated_clf.predict_proba(x_test)
 
-    metricas_ajustada_best_clf = metricas_classificacao('Bayes Search + XGBoost', y_train, y_predict_ajustada_train_best_clf, y_test, y_predict_ajustada_test_best_clf, y_predict_proba_ajustada_train_best_clf, y_predict_proba_ajustada_test_best_clf)
+
+    # Métricas Otimizadas
+
+    metricas_before_calibration_ajustada = metricas_classificacao('Threshold Proba (0.1) + Bayes Search + XGBoost', y_train, y_predict_train_otimizado, y_test, y_predict_test_otimizado, y_predict_proba_train_otimizado, y_predict_proba_test_otimizado)
+    metricas_after_calibration_ajustada = metricas_classificacao('Calibration + Threshold Proba (0.1) + Bayes Search + XGBoost', y_train, y_predict_ajustada_train_best_clf, y_test, y_predict_ajustada_test_best_clf, y_predict_proba_ajustada_train_best_clf, y_predict_proba_ajustada_test_best_clf)
+
+
+    print('Métricas Finais')
+    metricas_finais = metricas_classificacao_modelos_juntos(
+        [
+            metricas_before_calibration_ajustada,
+            metricas_after_calibration_ajustada
+        ]
+    )
+    display(metricas_finais)
 
     # Plote a curva de calibração
     plt.figure(figsize=(8, 8))
@@ -2459,3 +2518,30 @@ def calibracao_probabilidade():
     plt.ylabel('Fraction of Positives')
     plt.legend()
     plt.show()
+
+
+
+# def media_categoria_variavel_quantitativa(df, tipo):
+#     df_aux_2 = df.copy()
+#     categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'delinq_2yrs', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
+#     quantitativas = ['loan_amnt', 'int_rate', 'annual_inc', 'annual_income_commitment_rate', 'tot_cur_bal', 'total_rev_hi_lim', 'revol_util', 'open_acc', 'total_acc']
+#     if tipo == 'Criação':
+#         for cat in categoricas:
+#             for quant in quantitativas:
+#                 df_aux = df[[f'{cat}', f'{quant}']].copy()
+#                 df_aux = pd.DataFrame(df_aux.groupby(f'{cat}', as_index = False)[f'{quant}'].mean()).rename({f'{quant}':f'mean_{cat}_{quant}'}, axis = 1)
+#                 df_aux[f'mean_{cat}_{quant}'] = df_aux[f'mean_{cat}_{quant}'].apply(lambda x:float(x))
+#                 df_aux[[f'{cat}', f'mean_{cat}_{quant}']].drop_duplicates().sort_values(by = f'mean_{cat}_{quant}', ascending = True)
+#                 df_aux.to_csv(f'features/mean_{cat}_{quant}.csv', index = False)
+#                 df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'mean_{cat}_{quant}']], on = f'{cat}', how = 'left')
+#     else:
+#         for cat in categoricas:
+#             for quant in quantitativas:
+#                 ft = pd.read_csv(f'features/mean_{cat}_{quant}.csv')
+#                 replace_dict = dict(zip(ft[f'{cat}'], ft[f'mean_{cat}_{quant}']))
+#                 df_aux_2[f'mean_{cat}_{quant}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+
+#     return df_aux_2
+
+# df_train = media_categoria_variavel_quantitativa(df_train, 'Criação')
+# df_train.drop('addr_state', axis = 1, inplace = True)
