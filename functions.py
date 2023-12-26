@@ -1127,6 +1127,28 @@ def woe(df, feature, target):
     
     # return woe
 
+def iv(df, feature, target):
+    good = df.loc[df[target] == 0].groupby(feature, as_index = False)[target].count().rename({target:'good'}, axis = 1)
+    bad = df.loc[df[target] == 1].groupby(feature, as_index = False)[target].count().rename({target:'bad'}, axis = 1)
+
+    woe = good.merge(bad, on = feature, how = 'left')
+    woe['percent_good'] = woe['good']/woe['good'].sum()
+    woe['percent_bad'] = woe['bad']/woe['bad'].sum()
+    woe['woe'] = round(np.log(woe['percent_good']/woe['percent_bad']), 3)
+    woe['iv'] = ((woe['percent_good'] - woe['percent_bad'])*np.log(woe['percent_good']/woe['percent_bad'])).sum()
+
+    woe['woe'].fillna(0, inplace = True)
+    woe['iv'].fillna(0, inplace = True)
+
+    weight_of_evidence = woe['woe'].unique()
+    iv = round(woe['iv'].max(), 2)
+
+    dicionario = {feature:iv}
+
+    iv_df = pd.DataFrame(list(dicionario.items()), columns=['Feature', 'IV'])
+    
+    return iv_df
+
 def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
 
     predict_proba_train = pd.DataFrame(y_predict_proba_train.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
@@ -1137,8 +1159,8 @@ def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_pr
     precision_train = precision_score(y_train, y_predict_train)
     recall_train = recall_score(y_train, y_predict_train)
     f1_train = f1_score(y_train, y_predict_train)
-    roc_auc_train = roc_auc_score(y_train['loan_status'], predict_proba_train['predict_proba_1'])
-    fpr_train, tpr_train, thresholds_train = roc_curve(y_train['loan_status'], predict_proba_train['predict_proba_1'])
+    roc_auc_train = roc_auc_score(y_train['situacao_do_emprestimo'], predict_proba_train['predict_proba_1'])
+    fpr_train, tpr_train, thresholds_train = roc_curve(y_train['situacao_do_emprestimo'], predict_proba_train['predict_proba_1'])
     ks_train = max(tpr_train - fpr_train)
     metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'F1-Score': f1_train, 'AUC': roc_auc_train, 'KS': ks_train, 'Etapa': 'treino', 'Classificador': classificador}, index=[0])
     
@@ -1147,8 +1169,8 @@ def metricas_classificacao(classificador, y_train, y_predict_train, y_test, y_pr
     precision_test = precision_score(y_test, y_predict_test)
     recall_test = recall_score(y_test, y_predict_test)
     f1_test = f1_score(y_test, y_predict_test)
-    roc_auc_test = roc_auc_score(y_test['loan_status'], predict_proba_test['predict_proba_1'])
-    fpr_test, tpr_test, thresholds_test = roc_curve(y_test['loan_status'], predict_proba_test['predict_proba_1'])
+    roc_auc_test = roc_auc_score(y_test['situacao_do_emprestimo'], predict_proba_test['predict_proba_1'])
+    fpr_test, tpr_test, thresholds_test = roc_curve(y_test['situacao_do_emprestimo'], predict_proba_test['predict_proba_1'])
     ks_test = max(tpr_test - fpr_test)
     metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'F1-Score': f1_test, 'AUC': roc_auc_test, 'KS': ks_test, 'Etapa': 'teste', 'Classificador': classificador}, index=[0])
     
@@ -1196,6 +1218,16 @@ def metricas_classificacao_modelos_juntos(lista_modelos):
     styled_df
     return styled_df
 
+import pandas as pd
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    roc_curve
+)
+
 def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_proba):
 
     predict_proba = pd.DataFrame(y_predict_proba.tolist(), columns=['predict_proba_0', 'predict_proba_1'])
@@ -1205,22 +1237,22 @@ def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_prob
     precision = precision_score(y, y_predict)
     recall = recall_score(y, y_predict)
     f1 = f1_score(y, y_predict)
-    roc_auc = roc_auc_score(y['loan_status'], predict_proba['predict_proba_1'])
-    fpr, tpr, thresholds = roc_curve(y['loan_status'], predict_proba['predict_proba_1'])
+    roc_auc = roc_auc_score(y['situacao_do_emprestimo'], predict_proba['predict_proba_1'])
+    fpr, tpr, thresholds = roc_curve(y['situacao_do_emprestimo'], predict_proba['predict_proba_1'])
     ks = max(tpr - fpr)
-    total, retorno_financeiro_por_caso, valor_de_exposicao_total, return_on_portfolio = retorno_financeiro(df, 'loan_status', y, y_predict)
+    total, retorno_financeiro_por_caso, valor_de_exposicao_total, return_on_portfolio = retorno_financeiro(df, 'situacao_do_emprestimo', y, y_predict)
     total = 'R$' + str(int(round(total/1000000, 0))) + ' MM'
     valor_de_exposicao_total = 'R$' + str(float(round(valor_de_exposicao_total/1000000000, 3))) + 'B'
     rocp = str(return_on_portfolio) + '%'
     metricas_finais = pd.DataFrame({
-        'Acuracia': accuracy, 
-        'Precisao': precision, 
-        'Recall': recall, 
-        'F1-Score': f1, 
-        'AUC': roc_auc, 
-        'KS': ks, 
+        # 'Acuracia': accuracy, 
+        # 'Precisao': precision, 
+        # 'Recall': recall, 
+        # 'F1-Score': f1, 
+        # 'AUC': roc_auc, 
+        # 'KS': ks, 
         'Etapa': 'Amostra Final', 
-        'Classificador': classificador, 
+        'Método': classificador, 
         'Valor Total de Exposição': valor_de_exposicao_total,
         'Retorno Financeiro': total,
         'Return on Credit Portfolio (ROCP)': rocp
@@ -1247,26 +1279,29 @@ def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_prob
     # Estilizando o DataFrame
     styled_df = df.style\
         .format(format_values)\
-        .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px', subset=pd.IndexSlice[:, :])\
-        .applymap(color_etapa, subset=pd.IndexSlice[:, :])\
-        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px', subset=pd.IndexSlice[:, 'Acuracia':'F1-Score'])\
-        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px', subset=pd.IndexSlice[:, 'Etapa'])\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px', subset=pd.IndexSlice[:, 'Etapa':])\
+        .applymap(color_etapa, subset=pd.IndexSlice[:, 'Etapa':])\
         .set_table_styles([
             {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
         ])
 
     # Mostrando o DataFrame estilizado
-    styled_df
     return styled_df
+
+# Exemplo de chamada da função
+# Substitua os argumentos pelos seus dados reais
+# result = metricas_classificacao_final(classificador, df, y, y_predict, y_predict_proba)
+# result.show()  # Certifique-se de ajustar conforme necessário, dependendo do ambiente em que você está executando o código.
+
 
 def retorno_financeiro(df, target, y, y_predict):
 
     df_aux = df.copy()
-    df_aux['term'] = np.where(df_aux['term'] == ' 36 months', 36, 60)
-    df_aux['loan_amnt_with_int_rate'] = df_aux['installment']*df_aux['term']
+    df_aux['qt_parcelas'] = np.where(df_aux['qt_parcelas'] == ' 36 months', 36, 60)
+    df_aux['valor_emprestimo_solicitado_com_juros'] = df_aux['pagamento_mensal']*df_aux['qt_parcelas']
     df_aux['y_true'] = y[target].values
     df_aux['y_predict'] = y_predict
-    df_aux = df_aux[['installment', 'loan_amnt', 'term', 'int_rate', 'loan_amnt_with_int_rate', 'y_true', 'y_predict']]
+    df_aux = df_aux[['pagamento_mensal', 'valor_emprestimo_solicitado_com_juros', 'qt_parcelas', 'taxa_de_juros', 'valor_emprestimo_solicitado', 'y_true', 'y_predict']]
 
     TN = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE ELE É BOM
     FN = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É MAU E MEU MODELO FALA QUE ELE É BOM
@@ -1279,15 +1314,15 @@ def retorno_financeiro(df, target, y, y_predict):
                         'Verdadeiro Positivo (Cliente Mau | Modelo classifica como Mau) - Não ganho nada' # Não ganho nada
     )))
 
-    df_aux['retorno_financeiro'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), df_aux['loan_amnt_with_int_rate'] - df_aux['loan_amnt'], # Ganha a Diferença entre Valor Bruto e Valor com Juros
-                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), df_aux['loan_amnt']*(-1), # Perde o valor emprestado
-                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 0, # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros (df_aux['loan_amnt_with_int_rate'] - df_aux['loan_amnt'])*(-1)
+    df_aux['retorno_financeiro'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), df_aux['valor_emprestimo_solicitado_com_juros'] - df_aux['valor_emprestimo_solicitado'], # Ganha a Diferença entre Valor Bruto e Valor com Juros
+                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), df_aux['valor_emprestimo_solicitado']*(-1), # Perde o valor emprestado
+                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 0, # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros (df_aux['valor_emprestimo_solicitado_com_juros'] - df_aux['valor_emprestimo_solicitado_com_juros'])*(-1)
                         0 # Não ganho nada
     )))
 
-    valor_de_exposicao_total = int(df_aux['loan_amnt'].sum())
+    valor_de_exposicao_total = int(df_aux['valor_emprestimo_solicitado'].sum())
     retorno_financeiro = int(df_aux['retorno_financeiro'].sum())
-    valor_conquistado = valor_de_exposicao_total + retorno_financeiro,
+    valor_conquistado = valor_de_exposicao_total + retorno_financeiro
     return_on_portfolio = round((retorno_financeiro/valor_de_exposicao_total)*100, 2)
     retorno_financeiro_por_caso = df_aux.groupby('caso', as_index = False)['retorno_financeiro'].sum().sort_values(by = 'retorno_financeiro', ascending = False)
 
@@ -1321,7 +1356,6 @@ def retorno_financeiro(df, target, y, y_predict):
         ])
 
     return retorno_financeiro, styled_df, valor_de_exposicao_total, return_on_portfolio
-
 
 
 def separa_feature_target(target, dados):
@@ -1502,82 +1536,82 @@ def Classificador(classificador, x_train, y_train, x_test, y_test, class_weight)
 def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, class_weight):
 
     def numero_de_anos_emprego_atual(df):
-        df['emp_length'] = (df['emp_length'].replace({'< 1 year':0, '1 year':1, '2 years':2, '3 years':3, '4 years':4, '5 years':5, '6 years':6, '7 years':7, '8 years':8, '9 years':9,'10+ years':10}).fillna(0))
-        df['emp_length'] = df['emp_length'].apply(lambda x:int(x))
-        df['emp_length'] = np.where(df['emp_length'] <= 3, '3_YEARS', 
-                            np.where(df['emp_length'] <= 6, '6_YEARS',
-                            np.where(df['emp_length'] <= 9, '9_YEARS',
+        df['qt_anos_mesmo_emprego'] = (df['qt_anos_mesmo_emprego'].replace({'< 1 year':0, '1 year':1, '2 years':2, '3 years':3, '4 years':4, '5 years':5, '6 years':6, '7 years':7, '8 years':8, '9 years':9,'10+ years':10}).fillna(0))
+        df['qt_anos_mesmo_emprego'] = df['qt_anos_mesmo_emprego'].apply(lambda x:int(x))
+        df['qt_anos_mesmo_emprego'] = np.where(df['qt_anos_mesmo_emprego'] <= 3, '3_YEARS', 
+                            np.where(df['qt_anos_mesmo_emprego'] <= 6, '6_YEARS',
+                            np.where(df['qt_anos_mesmo_emprego'] <= 9, '9_YEARS',
                             '10_YEARS+')))
-        return df['emp_length']
+        return df['qt_anos_mesmo_emprego']
 
     def numero_de_registros_negativos(df):
 
-        df = df[['loan_status', 'pub_rec']].copy()
-        df[['pub_rec']] = np.where(df[['pub_rec']] == 0, 'sem_registros_negativos', 'com_registros_negativos')
+        df = df[['situacao_do_emprestimo', 'registros_publicos_depreciativos']].copy()
+        df[['registros_publicos_depreciativos']] = np.where(df[['registros_publicos_depreciativos']] == 0, 'sem_registros_negativos', 'com_registros_negativos')
 
-        return df['pub_rec']
+        return df['registros_publicos_depreciativos']
 
     def consulta_de_credito_nos_ultimos_6_meses(df):
-        df = df[['loan_status', 'inq_last_6mths']].copy()
-        df[['inq_last_6mths']] = np.where(df[['inq_last_6mths']] == 0, 'sem_consultas', 'com_consultas')
+        df = df[['situacao_do_emprestimo', 'qt_consultas_credito_6meses']].copy()
+        df[['qt_consultas_credito_6meses']] = np.where(df[['qt_consultas_credito_6meses']] == 0, 'sem_consultas', 'com_consultas')
 
-        return df['inq_last_6mths']
+        return df['qt_consultas_credito_6meses']
 
     def compromento_de_renda(df): 
-        df_aux = df[['annual_inc', 'installment', 'loan_amnt', 'term', 'int_rate', 'loan_status']].copy()
-        df_aux['term'] = np.where(df_aux['term'] == ' 36 months', 36, 60)
-        df_aux['loan_amnt_with_int_rate'] = df_aux['installment']*df_aux['term']
-        df_aux['annual_payment'] = np.where(df_aux['term'] == ' 36 months', df_aux['loan_amnt_with_int_rate']/3, df_aux['loan_amnt_with_int_rate']/5)
-        df_aux['annual_income_commitment_rate'] = ((df_aux['annual_payment']/df_aux['annual_inc'])*100).round(2)
+        df_aux = df[['faturamento_anual', 'pagamento_mensal', 'valor_emprestimo_solicitado', 'qt_parcelas', 'taxa_de_juros', 'situacao_do_emprestimo']].copy()
+        df_aux['qt_parcelas'] = np.where(df_aux['qt_parcelas'] == ' 36 months', 36, 60)
+        df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] = df_aux['pagamento_mensal']*df_aux['qt_parcelas']
+        df_aux['pagamento_anual'] = np.where(df_aux['qt_parcelas'] == ' 36 months', df_aux['valor_emprestimo_solicitado_com_taxa_de_juros']/3, df_aux['valor_emprestimo_solicitado_com_taxa_de_juros']/5)
+        df_aux['comprometimento_de_renda_anual'] = ((df_aux['pagamento_anual']/df_aux['faturamento_anual'])*100).round(2)
         
-        return df_aux['annual_income_commitment_rate']
+        return df_aux['comprometimento_de_renda_anual']
 
     def numero_incidencias_inadimplencia_vencidas_30d(df):
-        df_aux = df[['loan_status', 'delinq_2yrs']].copy()
-        df_aux['delinq_2yrs'] = np.where(df_aux[['delinq_2yrs']] == 0, 'sem_inadimplencia_vencida', 'com_inadimplencia_vencida')
+        df_aux = df[['situacao_do_emprestimo', 'inadimplencia_vencida_30dias']].copy()
+        df_aux['inadimplencia_vencida_30dias'] = np.where(df_aux[['inadimplencia_vencida_30dias']] == 0, 'sem_inadimplencia_vencida', 'com_inadimplencia_vencida')
 
-        return df_aux['delinq_2yrs']
+        return df_aux['inadimplencia_vencida_30dias']
 
     def n_meses_produto_credito_atual(df):
         df = df.copy()
-        df['issue_d'] = pd.to_datetime(df['issue_d'], format = '%b-%y')
-        df['mths_since_issue_d'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['issue_d'])/np.timedelta64(1, 'M')))
-        df['mths_since_issue_d'] = df['mths_since_issue_d'].fillna(df['mths_since_issue_d'].median())
-        df['mths_since_issue_d'] = np.where(df['mths_since_issue_d'] < 0, df['mths_since_issue_d'].median(), df['mths_since_issue_d'])
-        df['mths_since_issue_d'] = df['mths_since_issue_d'].apply(lambda x:int(x))
-        df['issue_d'] = df['mths_since_issue_d']
+        df['data_financiamento_emprestimo'] = pd.to_datetime(df['data_financiamento_emprestimo'], format = '%b-%y')
+        df['mths_since_data_financiamento_emprestimo'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['data_financiamento_emprestimo'])/np.timedelta64(1, 'M')))
+        df['mths_since_data_financiamento_emprestimo'] = df['mths_since_data_financiamento_emprestimo'].fillna(df['mths_since_data_financiamento_emprestimo'].median())
+        df['mths_since_data_financiamento_emprestimo'] = np.where(df['mths_since_data_financiamento_emprestimo'] < 0, df['mths_since_data_financiamento_emprestimo'].median(), df['mths_since_data_financiamento_emprestimo'])
+        df['mths_since_data_financiamento_emprestimo'] = df['mths_since_data_financiamento_emprestimo'].apply(lambda x:int(x))
+        df['data_financiamento_emprestimo'] = df['mths_since_data_financiamento_emprestimo']
 
-        return df['issue_d']
+        return df['data_financiamento_emprestimo']
 
     def n_meses_primeiro_produto_credito(df):
         df = df.copy()
-        df['earliest_cr_line'] = pd.to_datetime(df['earliest_cr_line'], format = '%b-%y')
-        df['mths_since_earliest_cr_line'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['earliest_cr_line'])/np.timedelta64(1, 'M')))
-        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].fillna(df['mths_since_earliest_cr_line'].median())
-        df['mths_since_earliest_cr_line'] = np.where(df['mths_since_earliest_cr_line'] < 0, df['mths_since_earliest_cr_line'].median(), df['mths_since_earliest_cr_line'])
-        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].apply(lambda x:int(x))
-        df['earliest_cr_line'] = df['mths_since_earliest_cr_line']
+        df['data_contratacao_primeiro_produto_credito'] = pd.to_datetime(df['data_contratacao_primeiro_produto_credito'], format = '%b-%y')
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['data_contratacao_primeiro_produto_credito'])/np.timedelta64(1, 'M')))
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = df['mths_since_data_contratacao_primeiro_produto_credito'].fillna(df['mths_since_data_contratacao_primeiro_produto_credito'].median())
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = np.where(df['mths_since_data_contratacao_primeiro_produto_credito'] < 0, df['mths_since_data_contratacao_primeiro_produto_credito'].median(), df['mths_since_data_contratacao_primeiro_produto_credito'])
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = df['mths_since_data_contratacao_primeiro_produto_credito'].apply(lambda x:int(x))
+        df['data_contratacao_primeiro_produto_credito'] = df['mths_since_data_contratacao_primeiro_produto_credito']
         
-        return df['earliest_cr_line']
+        return df['data_contratacao_primeiro_produto_credito']
 
     def formato_features_binarias(df):
-        df['term'] = np.where(df['term'] == ' 36 months', 0, 1)
-        df['delinq_2yrs'] = np.where(df['delinq_2yrs'] == 'sem_inadimplencia_vencida', 0, 1)
-        df['initial_list_status'] = np.where(df['initial_list_status'] == 'f', 0, 1)
-        df['pymnt_plan'] = np.where(df['pymnt_plan'] == 'n', 0, 1)
-        df['verification_status'] = np.where(df['verification_status'] == 'Source Verified', 0, 1)
-        df['inq_last_6mths'] = np.where(df['inq_last_6mths'] == 'com_consultas', 0, 1)
+        df['qt_parcelas'] = np.where(df['qt_parcelas'] == ' 36 months', 0, 1)
+        df['inadimplencia_vencida_30dias'] = np.where(df['inadimplencia_vencida_30dias'] == 'sem_inadimplencia_vencida', 0, 1)
+        df['tipo_de_concessao_do_credor'] = np.where(df['tipo_de_concessao_do_credor'] == 'f', 0, 1)
+        df['plano_de_pagamento'] = np.where(df['plano_de_pagamento'] == 'n', 0, 1)
+        df['renda_comprovada'] = np.where(df['renda_comprovada'] == 'Source Verified', 0, 1)
+        df['qt_consultas_credito_6meses'] = np.where(df['qt_consultas_credito_6meses'] == 'com_consultas', 0, 1)
 
         return df
 
     def target_encoder_bad_rate(df, tipo):
-        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
+        categoricas = ['qt_parcelas', 'grau_de_emprestimo', 'subclasse_de_emprestimo', 'produto_de_credito', 'produto_disponivel_publicamente', 'tipo_de_concessao_do_credor', 'plano_de_pagamento', 'qt_anos_mesmo_emprego', 'status_propriedade_residencial', 'renda_comprovada', 'estado', 'inadimplencia_vencida_30dias', 'registros_publicos_depreciativos', 'qt_consultas_credito_6meses']
         df_aux_2 = df.copy()
         if tipo == 'Criação':
             for cat in categoricas:
-                df_aux = df[[f'{cat}', 'loan_status']].copy()
-                good = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 0].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_good'}, axis = 1)
-                bad = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 1].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_bad'}, axis = 1)
+                df_aux = df[[f'{cat}', 'situacao_do_emprestimo']].copy()
+                good = pd.DataFrame(df_aux.loc[df_aux['situacao_do_emprestimo'] == 0].groupby(f'{cat}', as_index = False)['situacao_do_emprestimo'].count()).rename({'situacao_do_emprestimo':'qt_good'}, axis = 1)
+                bad = pd.DataFrame(df_aux.loc[df_aux['situacao_do_emprestimo'] == 1].groupby(f'{cat}', as_index = False)['situacao_do_emprestimo'].count()).rename({'situacao_do_emprestimo':'qt_bad'}, axis = 1)
                 df_aux = good.merge(bad, on = f'{cat}', how = 'left')
                 df_aux['qt_total'] = df_aux['qt_good'] + df_aux['qt_bad']
                 df_aux[f'{cat}_enc'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
@@ -1591,7 +1625,6 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
                 ft = pd.read_csv(f'features/{cat}_enc.csv')
                 replace_dict = dict(zip(ft[f'{cat}'], ft[f'{cat}_enc']))
                 df_aux_2[f'{cat}_enc'] = df_aux_2[f'{cat}'].replace(replace_dict)
-                df_aux_2.drop(f'{cat}', axis = 1, inplace = True)
 
         return df_aux_2
 
@@ -1604,9 +1637,9 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
 
         return imputer
 
-    columns_selected = ['loan_status', 'term','grade','sub_grade','purpose', 'delinq_2yrs', 'loan_amnt','int_rate','issue_d','policy_code','pymnt_plan','initial_list_status','installment','emp_length','home_ownership',
-    'verification_status','annual_inc','addr_state', 'tot_cur_bal','total_rev_hi_lim','revol_bal','revol_util','open_acc','total_acc','pub_rec','inq_last_6mths','earliest_cr_line','mths_since_last_record', 'mths_since_last_major_derog',
-    'mths_since_last_delinq']
+    columns_selected = ['situacao_do_emprestimo', 'qt_parcelas','grau_de_emprestimo','subclasse_de_emprestimo','produto_de_credito', 'inadimplencia_vencida_30dias', 'valor_emprestimo_solicitado','taxa_de_juros','data_financiamento_emprestimo','produto_disponivel_publicamente','plano_de_pagamento','tipo_de_concessao_do_credor','pagamento_mensal','qt_anos_mesmo_emprego','status_propriedade_residencial',
+    'renda_comprovada','faturamento_anual','estado', 'limite_total_produtos_credito','limite_total_rotativos','limite_rotativos_utilizado','taxa_utilizacao_limite_rotativos','qt_produtos_credito_contratados_atualmente','qt_produtos_credito_contratados_historicamente','registros_publicos_depreciativos','qt_consultas_credito_6meses','data_contratacao_primeiro_produto_credito','qt_meses_desde_ultimo_registro_publico', 'qt_meses_classificacao_mais_recente_90dias',
+    'qt_meses_ultima_inadimplencia']
 
     df_raw = df[columns_selected].copy()
 
@@ -1614,7 +1647,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
 
     features_selected = pd.read_csv('features/features_selected.csv')
     features_selected = features_selected.loc[features_selected['importance'] > 1] 
-    features_selected = list(features_selected['feature'].unique()) + ['loan_status']
+    features_selected = list(features_selected['feature'].unique()) + ['situacao_do_emprestimo']
 
     # Inicializar o KFold para dividir os dados
     kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -1635,23 +1668,23 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
         df_test = df_raw.iloc[test_idx]
 
         # Criação das Features sem Data Leakage
-        df_train['emp_length'] = numero_de_anos_emprego_atual(df_train)
-        df_train['pub_rec'] = numero_de_registros_negativos(df_train)
-        df_train['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_train)
-        df_train['annual_income_commitment_rate'] = compromento_de_renda(df_train)
-        df_train['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_train)
-        df_train['issue_d'] = n_meses_produto_credito_atual(df_train)
-        df_train['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_train)
+        df_train['qt_anos_mesmo_emprego'] = numero_de_anos_emprego_atual(df_train)
+        df_train['registros_publicos_depreciativos'] = numero_de_registros_negativos(df_train)
+        df_train['qt_consultas_credito_6meses'] = consulta_de_credito_nos_ultimos_6_meses(df_train)
+        df_train['comprometimento_de_renda_anual'] = compromento_de_renda(df_train)
+        df_train['inadimplencia_vencida_30dias'] = numero_incidencias_inadimplencia_vencidas_30d(df_train)
+        df_train['data_financiamento_emprestimo'] = n_meses_produto_credito_atual(df_train)
+        df_train['data_contratacao_primeiro_produto_credito'] = n_meses_primeiro_produto_credito(df_train)
         df_train = formato_features_binarias(df_train)
         df_train = target_encoder_bad_rate(df_train, 'escoragem')
 
-        df_test['emp_length'] = numero_de_anos_emprego_atual(df_test)
-        df_test['pub_rec'] = numero_de_registros_negativos(df_test)
-        df_test['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_test)
-        df_test['annual_income_commitment_rate'] = compromento_de_renda(df_test)
-        df_test['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_test)
-        df_test['issue_d'] = n_meses_produto_credito_atual(df_test)
-        df_test['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_test)
+        df_test['qt_anos_mesmo_emprego'] = numero_de_anos_emprego_atual(df_test)
+        df_test['registros_publicos_depreciativos'] = numero_de_registros_negativos(df_test)
+        df_test['qt_consultas_credito_6meses'] = consulta_de_credito_nos_ultimos_6_meses(df_test)
+        df_test['comprometimento_de_renda_anual'] = compromento_de_renda(df_test)
+        df_test['inadimplencia_vencida_30dias'] = numero_incidencias_inadimplencia_vencidas_30d(df_test)
+        df_test['data_financiamento_emprestimo'] = n_meses_produto_credito_atual(df_test)
+        df_test['data_contratacao_primeiro_produto_credito'] = n_meses_primeiro_produto_credito(df_test)
         df_test = formato_features_binarias(df_test)
         df_test = target_encoder_bad_rate(df_test, 'escoragem')
 
@@ -1660,8 +1693,8 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
         df_test = df_test[features_selected]
 
         # Separação Feature e Target
-        x_train, y_train = separa_feature_target('loan_status', df_train)
-        x_test, y_test = separa_feature_target('loan_status', df_test)
+        x_train, y_train = separa_feature_target('situacao_do_emprestimo', df_train)
+        x_test, y_test = separa_feature_target('situacao_do_emprestimo', df_test)
         
         # Imputer
         cols = list(x_train.columns)
@@ -1800,7 +1833,7 @@ def validacao_cruzada_classificacao(classificador, df, target_column, n_splits, 
 
         # Adicionar resultados de validação cruzada ao DataFrame
         fold_results = pd.DataFrame({
-            'loan_status': y_test['loan_status'].values,
+            'situacao_do_emprestimo': y_test['situacao_do_emprestimo'].values,
             'y_predict': y_pred,
             'predict_proba_0': y_proba[:, 0],  # Probabilidade da classe 0
             'predict_proba_1': y_proba[:, 1]  # Probabilidade da classe 1
@@ -2016,82 +2049,82 @@ def otimizacao(classificador, x_train, y_train, x_test, y_test):
 def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, n_splits, best_hiperpams):
 
     def numero_de_anos_emprego_atual(df):
-        df['emp_length'] = (df['emp_length'].replace({'< 1 year':0, '1 year':1, '2 years':2, '3 years':3, '4 years':4, '5 years':5, '6 years':6, '7 years':7, '8 years':8, '9 years':9,'10+ years':10}).fillna(0))
-        df['emp_length'] = df['emp_length'].apply(lambda x:int(x))
-        df['emp_length'] = np.where(df['emp_length'] <= 3, '3_YEARS', 
-                            np.where(df['emp_length'] <= 6, '6_YEARS',
-                            np.where(df['emp_length'] <= 9, '9_YEARS',
+        df['qt_anos_mesmo_emprego'] = (df['qt_anos_mesmo_emprego'].replace({'< 1 year':0, '1 year':1, '2 years':2, '3 years':3, '4 years':4, '5 years':5, '6 years':6, '7 years':7, '8 years':8, '9 years':9,'10+ years':10}).fillna(0))
+        df['qt_anos_mesmo_emprego'] = df['qt_anos_mesmo_emprego'].apply(lambda x:int(x))
+        df['qt_anos_mesmo_emprego'] = np.where(df['qt_anos_mesmo_emprego'] <= 3, '3_YEARS', 
+                            np.where(df['qt_anos_mesmo_emprego'] <= 6, '6_YEARS',
+                            np.where(df['qt_anos_mesmo_emprego'] <= 9, '9_YEARS',
                             '10_YEARS+')))
-        return df['emp_length']
+        return df['qt_anos_mesmo_emprego']
 
     def numero_de_registros_negativos(df):
 
-        df = df[['loan_status', 'pub_rec']].copy()
-        df[['pub_rec']] = np.where(df[['pub_rec']] == 0, 'sem_registros_negativos', 'com_registros_negativos')
+        df = df[['situacao_do_emprestimo', 'registros_publicos_depreciativos']].copy()
+        df[['registros_publicos_depreciativos']] = np.where(df[['registros_publicos_depreciativos']] == 0, 'sem_registros_negativos', 'com_registros_negativos')
 
-        return df['pub_rec']
+        return df['registros_publicos_depreciativos']
 
     def consulta_de_credito_nos_ultimos_6_meses(df):
-        df = df[['loan_status', 'inq_last_6mths']].copy()
-        df[['inq_last_6mths']] = np.where(df[['inq_last_6mths']] == 0, 'sem_consultas', 'com_consultas')
+        df = df[['situacao_do_emprestimo', 'qt_consultas_credito_6meses']].copy()
+        df[['qt_consultas_credito_6meses']] = np.where(df[['qt_consultas_credito_6meses']] == 0, 'sem_consultas', 'com_consultas')
 
-        return df['inq_last_6mths']
+        return df['qt_consultas_credito_6meses']
 
     def compromento_de_renda(df): 
-        df_aux = df[['annual_inc', 'installment', 'loan_amnt', 'term', 'int_rate', 'loan_status']].copy()
-        df_aux['term'] = np.where(df_aux['term'] == ' 36 months', 36, 60)
-        df_aux['loan_amnt_with_int_rate'] = df_aux['installment']*df_aux['term']
-        df_aux['annual_payment'] = np.where(df_aux['term'] == ' 36 months', df_aux['loan_amnt_with_int_rate']/3, df_aux['loan_amnt_with_int_rate']/5)
-        df_aux['annual_income_commitment_rate'] = ((df_aux['annual_payment']/df_aux['annual_inc'])*100).round(2)
+        df_aux = df[['faturamento_anual', 'pagamento_mensal', 'valor_emprestimo_solicitado', 'qt_parcelas', 'taxa_de_juros', 'situacao_do_emprestimo']].copy()
+        df_aux['qt_parcelas'] = np.where(df_aux['qt_parcelas'] == ' 36 months', 36, 60)
+        df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] = df_aux['pagamento_mensal']*df_aux['qt_parcelas']
+        df_aux['pagamento_anual'] = np.where(df_aux['qt_parcelas'] == ' 36 months', df_aux['valor_emprestimo_solicitado_com_taxa_de_juros']/3, df_aux['valor_emprestimo_solicitado_com_taxa_de_juros']/5)
+        df_aux['comprometimento_de_renda_anual'] = ((df_aux['pagamento_anual']/df_aux['faturamento_anual'])*100).round(2)
         
-        return df_aux['annual_income_commitment_rate']
+        return df_aux['comprometimento_de_renda_anual']
 
     def numero_incidencias_inadimplencia_vencidas_30d(df):
-        df_aux = df[['loan_status', 'delinq_2yrs']].copy()
-        df_aux['delinq_2yrs'] = np.where(df_aux[['delinq_2yrs']] == 0, 'sem_inadimplencia_vencida', 'com_inadimplencia_vencida')
+        df_aux = df[['situacao_do_emprestimo', 'inadimplencia_vencida_30dias']].copy()
+        df_aux['inadimplencia_vencida_30dias'] = np.where(df_aux[['inadimplencia_vencida_30dias']] == 0, 'sem_inadimplencia_vencida', 'com_inadimplencia_vencida')
 
-        return df_aux['delinq_2yrs']
+        return df_aux['inadimplencia_vencida_30dias']
 
     def n_meses_produto_credito_atual(df):
         df = df.copy()
-        df['issue_d'] = pd.to_datetime(df['issue_d'], format = '%b-%y')
-        df['mths_since_issue_d'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['issue_d'])/np.timedelta64(1, 'M')))
-        df['mths_since_issue_d'] = df['mths_since_issue_d'].fillna(df['mths_since_issue_d'].median())
-        df['mths_since_issue_d'] = np.where(df['mths_since_issue_d'] < 0, df['mths_since_issue_d'].median(), df['mths_since_issue_d'])
-        df['mths_since_issue_d'] = df['mths_since_issue_d'].apply(lambda x:int(x))
-        df['issue_d'] = df['mths_since_issue_d']
+        df['data_financiamento_emprestimo'] = pd.to_datetime(df['data_financiamento_emprestimo'], format = '%b-%y')
+        df['mths_since_data_financiamento_emprestimo'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['data_financiamento_emprestimo'])/np.timedelta64(1, 'M')))
+        df['mths_since_data_financiamento_emprestimo'] = df['mths_since_data_financiamento_emprestimo'].fillna(df['mths_since_data_financiamento_emprestimo'].median())
+        df['mths_since_data_financiamento_emprestimo'] = np.where(df['mths_since_data_financiamento_emprestimo'] < 0, df['mths_since_data_financiamento_emprestimo'].median(), df['mths_since_data_financiamento_emprestimo'])
+        df['mths_since_data_financiamento_emprestimo'] = df['mths_since_data_financiamento_emprestimo'].apply(lambda x:int(x))
+        df['data_financiamento_emprestimo'] = df['mths_since_data_financiamento_emprestimo']
 
-        return df['issue_d']
+        return df['data_financiamento_emprestimo']
 
     def n_meses_primeiro_produto_credito(df):
         df = df.copy()
-        df['earliest_cr_line'] = pd.to_datetime(df['earliest_cr_line'], format = '%b-%y')
-        df['mths_since_earliest_cr_line'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['earliest_cr_line'])/np.timedelta64(1, 'M')))
-        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].fillna(df['mths_since_earliest_cr_line'].median())
-        df['mths_since_earliest_cr_line'] = np.where(df['mths_since_earliest_cr_line'] < 0, df['mths_since_earliest_cr_line'].median(), df['mths_since_earliest_cr_line'])
-        df['mths_since_earliest_cr_line'] = df['mths_since_earliest_cr_line'].apply(lambda x:int(x))
-        df['earliest_cr_line'] = df['mths_since_earliest_cr_line']
+        df['data_contratacao_primeiro_produto_credito'] = pd.to_datetime(df['data_contratacao_primeiro_produto_credito'], format = '%b-%y')
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = round(pd.to_numeric((pd.to_datetime('2023-09-20') - df['data_contratacao_primeiro_produto_credito'])/np.timedelta64(1, 'M')))
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = df['mths_since_data_contratacao_primeiro_produto_credito'].fillna(df['mths_since_data_contratacao_primeiro_produto_credito'].median())
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = np.where(df['mths_since_data_contratacao_primeiro_produto_credito'] < 0, df['mths_since_data_contratacao_primeiro_produto_credito'].median(), df['mths_since_data_contratacao_primeiro_produto_credito'])
+        df['mths_since_data_contratacao_primeiro_produto_credito'] = df['mths_since_data_contratacao_primeiro_produto_credito'].apply(lambda x:int(x))
+        df['data_contratacao_primeiro_produto_credito'] = df['mths_since_data_contratacao_primeiro_produto_credito']
         
-        return df['earliest_cr_line']
+        return df['data_contratacao_primeiro_produto_credito']
 
     def formato_features_binarias(df):
-        df['term'] = np.where(df['term'] == ' 36 months', 0, 1)
-        df['delinq_2yrs'] = np.where(df['delinq_2yrs'] == 'sem_inadimplencia_vencida', 0, 1)
-        df['initial_list_status'] = np.where(df['initial_list_status'] == 'f', 0, 1)
-        df['pymnt_plan'] = np.where(df['pymnt_plan'] == 'n', 0, 1)
-        df['verification_status'] = np.where(df['verification_status'] == 'Source Verified', 0, 1)
-        df['inq_last_6mths'] = np.where(df['inq_last_6mths'] == 'com_consultas', 0, 1)
+        df['qt_parcelas'] = np.where(df['qt_parcelas'] == ' 36 months', 0, 1)
+        df['inadimplencia_vencida_30dias'] = np.where(df['inadimplencia_vencida_30dias'] == 'sem_inadimplencia_vencida', 0, 1)
+        df['tipo_de_concessao_do_credor'] = np.where(df['tipo_de_concessao_do_credor'] == 'f', 0, 1)
+        df['plano_de_pagamento'] = np.where(df['plano_de_pagamento'] == 'n', 0, 1)
+        df['renda_comprovada'] = np.where(df['renda_comprovada'] == 'Source Verified', 0, 1)
+        df['qt_consultas_credito_6meses'] = np.where(df['qt_consultas_credito_6meses'] == 'com_consultas', 0, 1)
 
         return df
 
     def target_encoder_bad_rate(df, tipo):
-        categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
+        categoricas = ['qt_parcelas', 'grau_de_emprestimo', 'subclasse_de_emprestimo', 'produto_de_credito', 'produto_disponivel_publicamente', 'tipo_de_concessao_do_credor', 'plano_de_pagamento', 'qt_anos_mesmo_emprego', 'status_propriedade_residencial', 'renda_comprovada', 'estado', 'inadimplencia_vencida_30dias', 'registros_publicos_depreciativos', 'qt_consultas_credito_6meses']
         df_aux_2 = df.copy()
         if tipo == 'Criação':
             for cat in categoricas:
-                df_aux = df[[f'{cat}', 'loan_status']].copy()
-                good = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 0].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_good'}, axis = 1)
-                bad = pd.DataFrame(df_aux.loc[df_aux['loan_status'] == 1].groupby(f'{cat}', as_index = False)['loan_status'].count()).rename({'loan_status':'qt_bad'}, axis = 1)
+                df_aux = df[[f'{cat}', 'situacao_do_emprestimo']].copy()
+                good = pd.DataFrame(df_aux.loc[df_aux['situacao_do_emprestimo'] == 0].groupby(f'{cat}', as_index = False)['situacao_do_emprestimo'].count()).rename({'situacao_do_emprestimo':'qt_good'}, axis = 1)
+                bad = pd.DataFrame(df_aux.loc[df_aux['situacao_do_emprestimo'] == 1].groupby(f'{cat}', as_index = False)['situacao_do_emprestimo'].count()).rename({'situacao_do_emprestimo':'qt_bad'}, axis = 1)
                 df_aux = good.merge(bad, on = f'{cat}', how = 'left')
                 df_aux['qt_total'] = df_aux['qt_good'] + df_aux['qt_bad']
                 df_aux[f'{cat}_enc'] = ((df_aux['qt_bad']/df_aux['qt_total'])*100).round(2)
@@ -2105,7 +2138,6 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
                 ft = pd.read_csv(f'features/{cat}_enc.csv')
                 replace_dict = dict(zip(ft[f'{cat}'], ft[f'{cat}_enc']))
                 df_aux_2[f'{cat}_enc'] = df_aux_2[f'{cat}'].replace(replace_dict)
-                df_aux_2.drop(f'{cat}', axis = 1, inplace = True)
 
         return df_aux_2
 
@@ -2119,9 +2151,6 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
 
         return imputer
 
-    columns_selected = ['loan_status', 'term','grade','sub_grade','purpose', 'delinq_2yrs', 'loan_amnt','int_rate','issue_d','policy_code','pymnt_plan','initial_list_status','installment','emp_length','home_ownership',
-    'verification_status','annual_inc','addr_state', 'tot_cur_bal','total_rev_hi_lim','revol_bal','revol_util','open_acc','total_acc','pub_rec','inq_last_6mths','earliest_cr_line','mths_since_last_record', 'mths_since_last_major_derog',
-    'mths_since_last_delinq']
 
     df_raw = df[columns_selected].copy()
 
@@ -2129,7 +2158,7 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
 
     features_selected = pd.read_csv('features/features_selected.csv')
     features_selected = features_selected.loc[features_selected['importance'] > 1] 
-    features_selected = list(features_selected['feature'].unique()) + ['loan_status']
+    features_selected = list(features_selected['feature'].unique()) + ['situacao_do_emprestimo']
 
     # Inicializar o KFold para dividir os dados
     kfold = KFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -2150,23 +2179,23 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
         df_test = df_raw.iloc[test_idx]
 
         # Criação das Features sem Data Leakage
-        df_train['emp_length'] = numero_de_anos_emprego_atual(df_train)
-        df_train['pub_rec'] = numero_de_registros_negativos(df_train)
-        df_train['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_train)
-        df_train['annual_income_commitment_rate'] = compromento_de_renda(df_train)
-        df_train['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_train)
-        df_train['issue_d'] = n_meses_produto_credito_atual(df_train)
-        df_train['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_train)
+        df_train['qt_anos_mesmo_emprego'] = numero_de_anos_emprego_atual(df_train)
+        df_train['registros_publicos_depreciativos'] = numero_de_registros_negativos(df_train)
+        df_train['qt_consultas_credito_6meses'] = consulta_de_credito_nos_ultimos_6_meses(df_train)
+        df_train['comprometimento_de_renda_anual'] = compromento_de_renda(df_train)
+        df_train['inadimplencia_vencida_30dias'] = numero_incidencias_inadimplencia_vencidas_30d(df_train)
+        df_train['data_financiamento_emprestimo'] = n_meses_produto_credito_atual(df_train)
+        df_train['data_contratacao_primeiro_produto_credito'] = n_meses_primeiro_produto_credito(df_train)
         df_train = formato_features_binarias(df_train)
         df_train = target_encoder_bad_rate(df_train, 'escoragem')
 
-        df_test['emp_length'] = numero_de_anos_emprego_atual(df_test)
-        df_test['pub_rec'] = numero_de_registros_negativos(df_test)
-        df_test['inq_last_6mths'] = consulta_de_credito_nos_ultimos_6_meses(df_test)
-        df_test['annual_income_commitment_rate'] = compromento_de_renda(df_test)
-        df_test['delinq_2yrs'] = numero_incidencias_inadimplencia_vencidas_30d(df_test)
-        df_test['issue_d'] = n_meses_produto_credito_atual(df_test)
-        df_test['earliest_cr_line'] = n_meses_primeiro_produto_credito(df_test)
+        df_test['qt_anos_mesmo_emprego'] = numero_de_anos_emprego_atual(df_test)
+        df_test['registros_publicos_depreciativos'] = numero_de_registros_negativos(df_test)
+        df_test['qt_consultas_credito_6meses'] = consulta_de_credito_nos_ultimos_6_meses(df_test)
+        df_test['comprometimento_de_renda_anual'] = compromento_de_renda(df_test)
+        df_test['inadimplencia_vencida_30dias'] = numero_incidencias_inadimplencia_vencidas_30d(df_test)
+        df_test['data_financiamento_emprestimo'] = n_meses_produto_credito_atual(df_test)
+        df_test['data_contratacao_primeiro_produto_credito'] = n_meses_primeiro_produto_credito(df_test)
         df_test = formato_features_binarias(df_test)
         df_test = target_encoder_bad_rate(df_test, 'escoragem')
 
@@ -2175,8 +2204,8 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
         df_test = df_test[features_selected]
 
         # Separação Feature e Target
-        x_train, y_train = separa_feature_target('loan_status', df_train)
-        x_test, y_test = separa_feature_target('loan_status', df_test)
+        x_train, y_train = separa_feature_target('situacao_do_emprestimo', df_train)
+        x_test, y_test = separa_feature_target('situacao_do_emprestimo', df_test)
         
         # Imputer
         cols = list(x_train.columns)
@@ -2265,7 +2294,7 @@ def validacao_cruzada_classificacao_otimizada(classificador, df, target_column, 
 
         # Adicionar resultados de validação cruzada ao DataFrame
         fold_results = pd.DataFrame({
-            'loan_status': y_test['loan_status'].values,
+            'situacao_do_emprestimo': y_test['situacao_do_emprestimo'].values,
             'y_predict': y_pred,
             'predict_proba_0': y_proba[:, 0],  # Probabilidade da classe 0
             'predict_proba_1': y_proba[:, 1]  # Probabilidade da classe 1
@@ -2355,7 +2384,7 @@ def modelo_corte_probabilidade(df_model, df_retorno_financeiro, target, x, y):
     corte_probabilidade = pd.DataFrame({'threshold':list_threshold, 'lucro':list_lucro})
 
 
-    # teste_threshold = pd.DataFrame({'y_true':y_test['loan_status'].values, 'y_predict_test':y_predict_test_otimizado, 'Proba Good':y_proba_test_otimizado[:, 0], 'Proba Bad':y_proba_test_otimizado[:, 1]})
+    # teste_threshold = pd.DataFrame({'y_true':y_test['situacao_do_emprestimo'].values, 'y_predict_test':y_predict_test_otimizado, 'Proba Good':y_proba_test_otimizado[:, 0], 'Proba Bad':y_proba_test_otimizado[:, 1]})
     # teste_threshold['y_predict_threshold'] = np.where(teste_threshold['Proba Good'] <= 0.4, 1, 0)
 
 
@@ -2415,7 +2444,7 @@ def escoragem(x, y):
     y_pred = clf_final.predict(x)
     y_proba= clf_final.predict_proba(x)
     teste_threshold = pd.DataFrame({'y_predict':y_pred, 'Proba Good':y_proba[:, 0]})
-    teste_threshold['y_predict_threshold'] = np.where(teste_threshold['Proba Good'] <= 0.4, 1, 0)
+    teste_threshold['y_predict_threshold'] = np.where(teste_threshold['Proba Good'] <= 0.3, 1, 0)
     y_pred = teste_threshold['y_predict_threshold'].values
 
     return y_pred, y_proba
