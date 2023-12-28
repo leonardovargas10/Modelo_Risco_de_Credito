@@ -1296,12 +1296,7 @@ def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_prob
 
 def retorno_financeiro(df, target, y, y_predict):
 
-    df_aux = df.copy()
-    df_aux['qt_parcelas'] = np.where(df_aux['qt_parcelas'] == ' 36 months', 36, 60)
-    df_aux['valor_emprestimo_solicitado_com_juros'] = df_aux['pagamento_mensal']*df_aux['qt_parcelas']
-    df_aux['y_true'] = y[target].values
-    df_aux['y_predict'] = y_predict
-    df_aux = df_aux[['pagamento_mensal', 'valor_emprestimo_solicitado_com_juros', 'qt_parcelas', 'taxa_de_juros', 'valor_emprestimo_solicitado', 'y_true', 'y_predict']]
+ 
 
     TN = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE ELE É BOM
     FN = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É MAU E MEU MODELO FALA QUE ELE É BOM
