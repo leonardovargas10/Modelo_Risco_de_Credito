@@ -2613,7 +2613,7 @@ def calibracao_probabilidade():
     plt.show()
 
 def corte_probabilidade_politica(df_politica):
-    list_threshold = [0.5, 0.6, 0.7, 0.8, 0.9]
+    list_threshold = [0.6, 0.7, 0.8, 0.9]
     list_lucro = []
     for threshold in list_threshold:
         df_aux['predict_proba_1'] = df_aux[['pagamento_mensal_enc', 'limite_rotativos_utilizado_enc',
