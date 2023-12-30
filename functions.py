@@ -1293,25 +1293,24 @@ def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_prob
 # result = metricas_classificacao_final(classificador, df, y, y_predict, y_predict_proba)
 # result.show()  # Certifique-se de ajustar conforme necessário, dependendo do ambiente em que você está executando o código.
 
+def retorno_financeiro(df, y_true, y_predict):
 
-def retorno_financeiro(df, target, y, y_predict):
+    df_aux = df.copy()
 
- 
+    TN = df_aux.loc[(df_aux[y_true] == 0) & (df_aux[y_predict] == 0)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE ELE É BOM
+    FN = df_aux.loc[(df_aux[y_true] == 1) & (df_aux[y_predict] == 0)].shape[0] # O CARA É MAU E MEU MODELO FALA QUE ELE É BOM
+    FP = df_aux.loc[(df_aux[y_true] == 0) & (df_aux[y_predict] == 1)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE É MAU
+    TP = df_aux.loc[(df_aux[y_true] == 1) & (df_aux[y_predict] == 1)].shape[0] # O CARA É MAU E O MEU MODELO FALA QUE É MAU
 
-    TN = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE ELE É BOM
-    FN = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É MAU E MEU MODELO FALA QUE ELE É BOM
-    FP = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE É MAU
-    TP = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É MAU E O MEU MODELO FALA QUE É MAU
-
-    df_aux['caso'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), 'Verdadeiro Negativo (Cliente Bom | Modelo classifica como Bom) - Ganho a Diferença entre Valor Bruto e Valor com Juros', # Ganha a Diferença entre Valor Bruto e Valor com Juros
-                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), 'Falso Negativo (Cliente Mau | Modelo classifica como Bom) - Perco o valor emprestado', # Perde o valor emprestado
-                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 'Falso Positivo (Cliente Bom | Modelo classifica como Mau) - Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros', # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
+    df_aux['caso'] = np.where((df_aux[y_true] == 0) & (df_aux[y_predict] == 0), 'Verdadeiro Negativo (Cliente Bom | Modelo classifica como Bom) - Ganho a Diferença entre Valor Bruto e Valor com Juros', # Ganha a Diferença entre Valor Bruto e Valor com Juros
+                        np.where((df_aux[y_true] == 1) & (df_aux[y_predict] == 0), 'Falso Negativo (Cliente Mau | Modelo classifica como Bom) - Perco o valor emprestado', # Perde o valor emprestado
+                        np.where((df_aux[y_true] == 0) & (df_aux[y_predict] == 1), 'Falso Positivo (Cliente Bom | Modelo classifica como Mau) - Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros', # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
                         'Verdadeiro Positivo (Cliente Mau | Modelo classifica como Mau) - Não ganho nada' # Não ganho nada
     )))
 
-    df_aux['retorno_financeiro'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), df_aux['valor_emprestimo_solicitado_com_juros'] - df_aux['valor_emprestimo_solicitado'], # Ganha a Diferença entre Valor Bruto e Valor com Juros
-                        np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), df_aux['valor_emprestimo_solicitado']*(-1), # Perde o valor emprestado
-                        np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 0, # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros (df_aux['valor_emprestimo_solicitado_com_juros'] - df_aux['valor_emprestimo_solicitado_com_juros'])*(-1)
+    df_aux['retorno_financeiro'] = np.where((df_aux[y_true] == 0) & (df_aux[y_predict] == 0), df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] - df_aux['valor_emprestimo_solicitado'], # Ganha a Diferença entre Valor Bruto e Valor com Juros
+                        np.where((df_aux[y_true] == 1) & (df_aux[y_predict] == 0), df_aux['valor_emprestimo_solicitado']*(-1), # Perde o valor emprestado
+                        np.where((df_aux[y_true] == 0) & (df_aux[y_predict] == 1), 0, # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros (df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] - df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'])*(-1)
                         0 # Não ganho nada
     )))
 
@@ -1353,6 +1352,65 @@ def retorno_financeiro(df, target, y, y_predict):
     return retorno_financeiro, styled_df, valor_de_exposicao_total, return_on_portfolio
 
 
+# def retorno_financeiro(df, target, y, y_predict):
+
+#     df_aux = df.copy()
+
+#     TN = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE ELE É BOM
+#     FN = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0)].shape[0] # O CARA É MAU E MEU MODELO FALA QUE ELE É BOM
+#     FP = df_aux.loc[(df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É BOM E MEU MODELO FALA QUE É MAU
+#     TP = df_aux.loc[(df_aux['y_true'] == 1) & (df_aux['y_predict'] == 1)].shape[0] # O CARA É MAU E O MEU MODELO FALA QUE É MAU
+
+#     df_aux['caso'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), 'Verdadeiro Negativo (Cliente Bom | Modelo classifica como Bom) - Ganho a Diferença entre Valor Bruto e Valor com Juros', # Ganha a Diferença entre Valor Bruto e Valor com Juros
+#                         np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), 'Falso Negativo (Cliente Mau | Modelo classifica como Bom) - Perco o valor emprestado', # Perde o valor emprestado
+#                         np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 'Falso Positivo (Cliente Bom | Modelo classifica como Mau) - Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros', # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros
+#                         'Verdadeiro Positivo (Cliente Mau | Modelo classifica como Mau) - Não ganho nada' # Não ganho nada
+#     )))
+
+#     df_aux['retorno_financeiro'] = np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 0), df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] - df_aux['valor_emprestimo_solicitado'], # Ganha a Diferença entre Valor Bruto e Valor com Juros
+#                         np.where((df_aux['y_true'] == 1) & (df_aux['y_predict'] == 0), df_aux['valor_emprestimo_solicitado']*(-1), # Perde o valor emprestado
+#                         np.where((df_aux['y_true'] == 0) & (df_aux['y_predict'] == 1), 0, # Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros (df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] - df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'])*(-1)
+#                         0 # Não ganho nada
+#     )))
+
+#     valor_de_exposicao_total = int(df_aux['valor_emprestimo_solicitado'].sum())
+#     retorno_financeiro = int(df_aux['retorno_financeiro'].sum())
+#     valor_conquistado = valor_de_exposicao_total + retorno_financeiro
+#     return_on_portfolio = round((retorno_financeiro/valor_de_exposicao_total)*100, 2)
+#     retorno_financeiro_por_caso = df_aux.groupby('caso', as_index = False)['retorno_financeiro'].sum().sort_values(by = 'retorno_financeiro', ascending = False)
+
+#     # Crie um DataFrame a partir dos hiperparâmetros
+#     df = retorno_financeiro_por_caso.reset_index(drop=True)
+#     df = df.round(2)
+
+#     def color_etapa(val):
+#         color = 'black'
+#         if val == 'treino':
+#             color = 'blue'
+#         elif val == 'teste':
+#             color = 'red'
+#         return f'color: {color}; font-weight: bold;'
+
+#     # Função para formatar os valores com até duas casas decimais
+#     def format_values(val):
+#         if isinstance(val, (int, float)):
+#             return f'{val:.2f}'
+#         return val
+
+#     # Estilizando o DataFrame
+#     styled_df = df.style\
+#         .format(format_values)\
+#         .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px')\
+#         .applymap(color_etapa, subset=pd.IndexSlice[:, :])\
+#         .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+#         .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+#         .set_table_styles([
+#             {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
+#         ])
+
+#     return retorno_financeiro, styled_df, valor_de_exposicao_total, return_on_portfolio
+
+
 def separa_feature_target(target, dados):
     x = dados.drop(target, axis = 1)
     y = dados[[target]]
@@ -1387,6 +1445,17 @@ def transform_to_deciles(df, variavel_continua):
     deciles = pd.qcut(df[variavel_continua], q=10, labels=False, duplicates='drop')
     
     return deciles
+    
+def transform_to_quantiles(df, variavel_continua):
+
+    decile_limits = [df[variavel_continua].quantile(i / 10) for i in range(10)]  # Calcula os pontos de corte
+    
+    return decile_limits
+
+# Exemplo de uso:
+# Suponha que você tenha um DataFrame df e uma coluna chamada 'variavel_contínua'
+# df['decile_values'] = transform_to_decile_values(df, 'variavel_contínua')
+
 
 def transform_to_percentiles(df, variavel_continua):
     # Calcula os limites dos percentis de 0,01 a 0,95 em incrementos de 0,01
@@ -2543,7 +2612,25 @@ def calibracao_probabilidade():
     plt.legend()
     plt.show()
 
+def corte_probabilidade_politica(df_politica):
+    list_threshold = [0.5, 0.6, 0.7, 0.8, 0.9]
+    list_lucro = []
+    for threshold in list_threshold:
+        df_aux['predict_proba_1'] = df_aux[['pagamento_mensal_enc', 'limite_rotativos_utilizado_enc',
+            'taxa_de_juros_enc', 'subclasse_de_emprestimo_enc',
+            'grau_de_emprestimo_enc',
+            'comprometimento_de_renda_anual_enc', 'faturamento_anual_enc']].sum(axis = 1)
+        df_politica['predict_proba_1'] = np.where(df_politica['predict_proba_1'] >= 100, 100, df_politica['predict_proba_1'])
+        df_politica['predict_proba_1'] = df_politica['predict_proba_1']/100
+        df_politica['predict_proba_0'] = 1 - df_politica['predict_proba_1']
+        df_politica['y_predict'] = np.where(df_politica['predict_proba_1']  <= threshold, 1, 0)
 
+        lucro = retorno_financeiro(df_politica, 'situacao_do_emprestimo', 'y_predict')[0]
+        list_lucro.append(lucro)
+        df_politica.drop(['predict_proba_1', 'predict_proba_0', 'y_predict'], axis = 1, inplace = True)
+    
+    corte_probabilidade = pd.DataFrame({'threshold':list_threshold, 'lucro':list_lucro})
+    return corte_probabilidade
 
 # def media_categoria_variavel_quantitativa(df, tipo):
 #     df_aux_2 = df.copy()
