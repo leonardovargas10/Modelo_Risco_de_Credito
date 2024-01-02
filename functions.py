@@ -2612,8 +2612,113 @@ def calibracao_probabilidade():
     plt.legend()
     plt.show()
 
+
+def politica_de_credito(df):    
+    df_aux = df.copy()
+    df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] = df_aux['pagamento_mensal']*df_aux['qt_parcelas']
+    df_aux = df_aux[['situacao_do_emprestimo', 'estado', 'pagamento_mensal', 'limite_rotativos_utilizado', 'taxa_de_juros',
+        'subclasse_de_emprestimo', 'grau_de_emprestimo',
+        'qt_meses_classificacao_mais_recente_90dias',
+        'qt_meses_ultima_inadimplencia', 
+        'comprometimento_de_renda_anual',
+        'faturamento_anual', 'valor_emprestimo_solicitado', 'valor_emprestimo_solicitado_com_taxa_de_juros']].copy()
+    for num in df_aux.drop(['situacao_do_emprestimo', 'estado', 'valor_emprestimo_solicitado', 'valor_emprestimo_solicitado_com_taxa_de_juros', 'subclasse_de_emprestimo', 'grau_de_emprestimo'], axis = 1):
+        df_aux[f'{num}'].fillna(df_aux[num].median(), inplace = True)
+    df_aux.rename({'estado':'qt_clientes'}, axis = 1, inplace = True)
+
+
+    for col in ['comprometimento_de_renda_anual', 'faturamento_anual', 'limite_rotativos_utilizado', 'pagamento_mensal', 'taxa_de_juros']:
+        df_bad_rate = pd.read_excel(f"Credit_Policy/{col}_value_pair.xlsx").sort_values(by = f'{col}_value', ascending = True)
+        df_aux[f'{col}'] = np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[0], df_bad_rate[f'{col}_enc'].values[0], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[1], df_bad_rate[f'{col}_enc'].values[1], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[2], df_bad_rate[f'{col}_enc'].values[2], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[3], df_bad_rate[f'{col}_enc'].values[3], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[4], df_bad_rate[f'{col}_enc'].values[4], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[5], df_bad_rate[f'{col}_enc'].values[5], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[6], df_bad_rate[f'{col}_enc'].values[6], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[7], df_bad_rate[f'{col}_enc'].values[7], 
+                           np.where(df_aux[f'{col}'] <= df_bad_rate[f'{col}_value'].values[8], df_bad_rate[f'{col}_enc'].values[8], 
+                           df_bad_rate[f'{col}_enc'].values[9])))))))))
+
+    for col in ['grau_de_emprestimo']:
+        df_bad_rate = pd.read_excel(f"Credit_Policy/{col}_value_pair.xlsx").sort_values(by = f'{col}_value', ascending = True)
+        df_aux[f'{col}'] = np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[0], df_bad_rate[f'{col}_enc'].values[0], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[1], df_bad_rate[f'{col}_enc'].values[1], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[2], df_bad_rate[f'{col}_enc'].values[2], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[3], df_bad_rate[f'{col}_enc'].values[3], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[4], df_bad_rate[f'{col}_enc'].values[4], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[5], df_bad_rate[f'{col}_enc'].values[5],         
+                           df_bad_rate[f'{col}_enc'].values[6]))))))
+
+    for col in ['subclasse_de_emprestimo']:
+        df_bad_rate = pd.read_excel(f"Credit_Policy/{col}_value_pair.xlsx").sort_values(by = f'{col}_value', ascending = True)
+        df_aux[f'{col}'] = np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[0], df_bad_rate[f'{col}_enc'].values[0], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[1], df_bad_rate[f'{col}_enc'].values[1], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[2], df_bad_rate[f'{col}_enc'].values[2], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[3], df_bad_rate[f'{col}_enc'].values[3], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[4], df_bad_rate[f'{col}_enc'].values[4], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[5], df_bad_rate[f'{col}_enc'].values[5], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[6], df_bad_rate[f'{col}_enc'].values[6], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[7], df_bad_rate[f'{col}_enc'].values[7], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[8], df_bad_rate[f'{col}_enc'].values[8], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[9], df_bad_rate[f'{col}_enc'].values[9], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[10], df_bad_rate[f'{col}_enc'].values[10], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[11], df_bad_rate[f'{col}_enc'].values[11], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[12], df_bad_rate[f'{col}_enc'].values[12], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[13], df_bad_rate[f'{col}_enc'].values[13], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[14], df_bad_rate[f'{col}_enc'].values[14], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[15], df_bad_rate[f'{col}_enc'].values[15], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[16], df_bad_rate[f'{col}_enc'].values[16], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[17], df_bad_rate[f'{col}_enc'].values[17], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[18], df_bad_rate[f'{col}_enc'].values[18], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[19], df_bad_rate[f'{col}_enc'].values[19], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[20], df_bad_rate[f'{col}_enc'].values[20], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[21], df_bad_rate[f'{col}_enc'].values[21], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[22], df_bad_rate[f'{col}_enc'].values[22], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[23], df_bad_rate[f'{col}_enc'].values[23], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[24], df_bad_rate[f'{col}_enc'].values[24], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[25], df_bad_rate[f'{col}_enc'].values[25],   
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[26], df_bad_rate[f'{col}_enc'].values[26], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[27], df_bad_rate[f'{col}_enc'].values[27], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[28], df_bad_rate[f'{col}_enc'].values[28], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[29], df_bad_rate[f'{col}_enc'].values[29], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[30], df_bad_rate[f'{col}_enc'].values[30], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[31], df_bad_rate[f'{col}_enc'].values[31], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[32], df_bad_rate[f'{col}_enc'].values[32], 
+                           np.where(df_aux[f'{col}'] == df_bad_rate[f'{col}_value'].values[33], df_bad_rate[f'{col}_enc'].values[33],            
+                           df_bad_rate[f'{col}_enc'].values[34]))))))))))))))))))))))))))))))))))
+
+    df_aux['predict_proba_1'] = df_aux[['pagamento_mensal', 'limite_rotativos_utilizado',
+        'taxa_de_juros', 'subclasse_de_emprestimo',
+        'grau_de_emprestimo',
+        'comprometimento_de_renda_anual', 'faturamento_anual']].sum(axis = 1)
+    df_aux['predict_proba_1'] = np.where(df_aux['predict_proba_1'] >= 100, 100, df_aux['predict_proba_1'])
+    df_aux['predict_proba_1'] = df_aux['predict_proba_1']/100
+    df_aux['predict_proba_0'] = 1 - df_aux['predict_proba_1']
+    df_aux['y_predict'] = np.where(df_aux['predict_proba_1']  <= 0.88, 1, 0)
+    df_aux.rename({'situacao_do_emprestimo':'y_true'}, axis = 1, inplace = True)
+
+    df_aux.head()
+
+    y_true = df_aux[['y_true']]
+    y_predict = df_aux[['y_predict']]
+    y_predict_proba_0 = df_aux['predict_proba_0'].values
+    y_predict_proba_1 = df_aux['predict_proba_1'].values
+    y_predict_proba = pd.DataFrame({'predict_proba_0':y_predict_proba_0, 'predict_proba_1':y_predict_proba_1})
+
+    df_predict = pd.DataFrame(
+            {
+                'y_true':df_aux['y_true'].values,
+                'y_predict':df_aux['y_predict'].values,
+                'y_predict_proba_0':y_predict_proba_0,
+                'y_predict_proba_1':y_predict_proba_1,
+            }
+        )
+
+    return y_true, y_predict, y_predict_proba, df_predict
+
 def corte_probabilidade_politica(df_politica):
-    list_threshold = [0.6, 0.7, 0.8, 0.9]
+    list_threshold = [0.88, 0.89, 0.90, 0.91, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99]
     list_lucro = []
     for threshold in list_threshold:
         df_aux['predict_proba_1'] = df_aux[['pagamento_mensal_enc', 'limite_rotativos_utilizado_enc',
@@ -2632,27 +2737,278 @@ def corte_probabilidade_politica(df_politica):
     corte_probabilidade = pd.DataFrame({'threshold':list_threshold, 'lucro':list_lucro})
     return corte_probabilidade
 
-# def media_categoria_variavel_quantitativa(df, tipo):
-#     df_aux_2 = df.copy()
-#     categoricas = ['term', 'grade', 'sub_grade', 'purpose', 'delinq_2yrs', 'policy_code', 'initial_list_status', 'pymnt_plan', 'emp_length', 'home_ownership', 'verification_status', 'addr_state', 'pub_rec', 'inq_last_6mths']
-#     quantitativas = ['loan_amnt', 'int_rate', 'annual_inc', 'annual_income_commitment_rate', 'tot_cur_bal', 'total_rev_hi_lim', 'revol_util', 'open_acc', 'total_acc']
-#     if tipo == 'Criação':
-#         for cat in categoricas:
-#             for quant in quantitativas:
-#                 df_aux = df[[f'{cat}', f'{quant}']].copy()
-#                 df_aux = pd.DataFrame(df_aux.groupby(f'{cat}', as_index = False)[f'{quant}'].mean()).rename({f'{quant}':f'mean_{cat}_{quant}'}, axis = 1)
-#                 df_aux[f'mean_{cat}_{quant}'] = df_aux[f'mean_{cat}_{quant}'].apply(lambda x:float(x))
-#                 df_aux[[f'{cat}', f'mean_{cat}_{quant}']].drop_duplicates().sort_values(by = f'mean_{cat}_{quant}', ascending = True)
-#                 df_aux.to_csv(f'features/mean_{cat}_{quant}.csv', index = False)
-#                 df_aux_2 = df_aux_2.merge(df_aux[[f'{cat}', f'mean_{cat}_{quant}']], on = f'{cat}', how = 'left')
-#     else:
-#         for cat in categoricas:
-#             for quant in quantitativas:
-#                 ft = pd.read_csv(f'features/mean_{cat}_{quant}.csv')
-#                 replace_dict = dict(zip(ft[f'{cat}'], ft[f'mean_{cat}_{quant}']))
-#                 df_aux_2[f'mean_{cat}_{quant}'] = df_aux_2[f'{cat}'].replace(replace_dict)
+def metricas_politica_credito(Politica, y_train, y_predict_train, y_test, y_predict_test, y_predict_proba_train, y_predict_proba_test):
 
-#     return df_aux_2
+    predict_proba_train = y_predict_proba_train
+    predict_proba_test = y_predict_proba_test
 
-# df_train = media_categoria_variavel_quantitativa(df_train, 'Criação')
-# df_train.drop('addr_state', axis = 1, inplace = True)
+    # Treino
+    accuracy_train = accuracy_score(y_train, y_predict_train)
+    precision_train = precision_score(y_train, y_predict_train)
+    recall_train = recall_score(y_train, y_predict_train)
+    f1_train = f1_score(y_train, y_predict_train)
+    roc_auc_train = roc_auc_score(y_train['y_true'], predict_proba_train['predict_proba_1'])
+    fpr_train, tpr_train, thresholds_train = roc_curve(y_train['y_true'], predict_proba_train['predict_proba_1'])
+    ks_train = max(tpr_train - fpr_train)
+    metricas_treino = pd.DataFrame({'Acuracia': accuracy_train, 'Precisao': precision_train, 'Recall': recall_train, 'F1-Score': f1_train, 'AUC': roc_auc_train, 'KS': ks_train, 'Etapa': 'treino', 'Politica': Politica}, index=[0])
+    
+    # Teste
+    accuracy_test = accuracy_score(y_test, y_predict_test)
+    precision_test = precision_score(y_test, y_predict_test)
+    recall_test = recall_score(y_test, y_predict_test)
+    f1_test = f1_score(y_test, y_predict_test)
+    roc_auc_test = roc_auc_score(y_test['y_true'], predict_proba_test['predict_proba_1'])
+    fpr_test, tpr_test, thresholds_test = roc_curve(y_test['y_true'], predict_proba_test['predict_proba_1'])
+    ks_test = max(tpr_test - fpr_test)
+    metricas_teste = pd.DataFrame({'Acuracia': accuracy_test, 'Precisao': precision_test, 'Recall': recall_test, 'F1-Score': f1_test, 'AUC': roc_auc_test, 'KS': ks_test, 'Etapa': 'teste', 'Politica': Politica}, index=[0])
+    
+    # Consolidando
+    metricas_finais = pd.concat([metricas_treino, metricas_teste])
+
+    return metricas_finais
+
+def auc_ks_politica(Politica, target, 
+                                    y_train, y_predict_train, 
+                                    y_test, y_predict_test, 
+                                    predict_proba_train, predict_proba_test):
+
+    # Inicialize as variáveis x_max_ks e y_max_ks fora dos blocos condicionais
+    x_max_ks_train, y_max_ks_train = 0, 0
+    x_max_ks_test, y_max_ks_test = 0, 0
+
+    ### Treino
+    results_train = y_train[[target]].copy()
+    results_train['y_predict_train'] = y_predict_train
+    results_train['predict_proba_0'] = list(predict_proba_train['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results_train['predict_proba_1'] = list(predict_proba_train['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    results_train_sorted = results_train.sort_values(by='predict_proba_1', ascending=False)
+    results_train_sorted['Cumulative N Population'] = range(1, results_train_sorted.shape[0] + 1)
+    results_train_sorted['Cumulative N Good'] = results_train_sorted[target].cumsum()
+    results_train_sorted['Cumulative N Bad'] = results_train_sorted['Cumulative N Population'] - results_train_sorted['Cumulative N Good']
+    results_train_sorted['Cumulative Perc Population'] = results_train_sorted['Cumulative N Population'] / results_train_sorted.shape[0]
+    results_train_sorted['Cumulative Perc Good'] = results_train_sorted['Cumulative N Good'] / results_train_sorted[target].sum()
+    results_train_sorted['Cumulative Perc Bad'] = results_train_sorted['Cumulative N Bad'] / (results_train_sorted.shape[0] - results_train_sorted[target].sum())
+
+    max_ks_index_train = np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])
+    x_max_ks_train = results_train_sorted['Cumulative Perc Population'].iloc[max_ks_index_train]
+    y_max_ks_train = results_train_sorted['Cumulative Perc Good'].iloc[max_ks_index_train]
+    y_min_ks_train = results_train_sorted['Cumulative Perc Bad'].iloc[max_ks_index_train]
+
+        ###### Calculate AUC and ROC for the training set
+    y_true_train = results_train[target]
+    y_scores_train = results_train['predict_proba_1']
+    auc_train = roc_auc_score(y_true_train, y_scores_train)
+    fpr_train, tpr_train, thresholds_train = roc_curve(y_true_train, y_scores_train)
+        ###### Calculate KS curve for the training set
+    KS_train = round(np.max(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad']), 2)
+
+    ### Teste
+    results_test = y_test[[target]].copy()
+    results_test['y_predict_test'] = y_predict_test
+    results_test['predict_proba_0'] = list(predict_proba_test['predict_proba_0']) # Probabilidade de ser Bom (classe 0)
+    results_test['predict_proba_1'] = list(predict_proba_test['predict_proba_1']) # Probabilidade de ser Mau (classe 1)
+
+    results_test_sorted = results_test.sort_values(by='predict_proba_1', ascending=False)
+    results_test_sorted['Cumulative N Population'] = range(1, results_test_sorted.shape[0] + 1)
+    results_test_sorted['Cumulative N Good'] = results_test_sorted[target].cumsum()
+    results_test_sorted['Cumulative N Bad'] = results_test_sorted['Cumulative N Population'] - results_test_sorted['Cumulative N Good']
+    results_test_sorted['Cumulative Perc Population'] = results_test_sorted['Cumulative N Population'] / results_test_sorted.shape[0]
+    results_test_sorted['Cumulative Perc Good'] = results_test_sorted['Cumulative N Good'] / results_test_sorted[target].sum()
+    results_test_sorted['Cumulative Perc Bad'] = results_test_sorted['Cumulative N Bad'] / (results_test_sorted.shape[0] - results_test_sorted[target].sum())
+
+    max_ks_index_test = np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])
+    x_max_ks_test = results_test_sorted['Cumulative Perc Population'].iloc[max_ks_index_test]
+    y_max_ks_test = results_test_sorted['Cumulative Perc Good'].iloc[max_ks_index_test]
+    y_min_ks_test = results_test_sorted['Cumulative Perc Bad'].iloc[max_ks_index_test]
+
+
+            ###### Calculate AUC and ROC for the test set
+    y_true_test = results_test[target]
+    y_scores_test = results_test['predict_proba_1']
+    auc_test = roc_auc_score(y_true_test, y_scores_test)
+    fpr_test, tpr_test, thresholds_test = roc_curve(y_true_test, y_scores_test)
+            ###### Calculate KS curve for the test set
+    KS_test = round(np.max(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad']), 2)
+
+    # Plot ROC and KS curves side by side
+    fig, axs = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Training set ROC curve
+    axs[0].plot(fpr_train, tpr_train, label='Train ROC Curve (AUC = {:.2f})'.format(auc_train), color='purple')
+    axs[0].fill_between(fpr_train, 0, tpr_train, color='gray', alpha=0.3)  # Preencha a área sob a curva ROC
+    axs[0].plot([0, 1], [0, 1], linestyle='--', color='black')
+    axs[0].set_xlabel('False Positive Rate', fontsize = 14)
+    axs[0].set_ylabel('True Positive Rate', fontsize = 14)
+    axs[0].set_title(f'ROC Curve - {Politica}', fontsize = 14)
+
+    # Test set ROC curve
+    axs[0].plot(fpr_test, tpr_test, label='Test ROC Curve (AUC = {:.2f})'.format(auc_test), color='orange')
+    axs[0].fill_between(fpr_test, 0, tpr_test, color='gray', alpha=0.3)  # Preencha a área sob a curva ROC
+
+    # Adicione a legenda personalizada com cores para a curva ROC
+    roc_legend_labels = [
+        {'label': 'Train ROC Curve (AUC = {:.2f})'.format(auc_train), 'color': 'purple', 'marker': 'o'},
+        {'label': 'Test ROC Curve (AUC = {:.2f})'.format(auc_test), 'color': 'orange', 'marker': 's'},
+    ]
+
+    # Criar marcadores personalizados para a legenda ROC
+    roc_legend_handles = [Line2D([0], [0], marker=label_info['marker'], color='w', markerfacecolor=label_info['color'], markersize=10) for label_info in roc_legend_labels]
+
+    # Adicione a legenda personalizada ao gráfico da curva ROC
+    roc_legend = axs[0].legend(handles=roc_legend_handles, labels=[label_info['label'] for label_info in roc_legend_labels], loc='upper right', bbox_to_anchor=(0.9, 0.4), fontsize='11')
+    roc_legend.set_title('ROC AUC', prop={'size': '11'})
+
+
+    # Train set KS curve
+    axs[1].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], label='Train Positive Class (Class 1)', color='purple')
+    axs[1].plot(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Bad'], label='Train Negative Class (Class 0)', color='purple')
+    axs[1].plot([x_max_ks_train, x_max_ks_train], [y_min_ks_train, y_max_ks_train], color='black', linestyle='--')
+    axs[1].fill_between(results_train_sorted['Cumulative Perc Population'], results_train_sorted['Cumulative Perc Good'], results_train_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[1].text(x=results_train_sorted['Cumulative Perc Population'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])],
+                y=(y_min_ks_train + results_train_sorted['Cumulative Perc Good'].iloc[np.argmax(results_train_sorted['Cumulative Perc Good'] - results_train_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS_train), fontsize = 14, color='purple', ha='left', va='center', rotation=45)
+    axs[1].set_xlabel('Cumulative Percentage of Population', fontsize = 14)
+    axs[1].set_ylabel('Cumulative Percentage', fontsize = 14)
+    axs[1].set_title(f'KS Plot - {Politica}', fontsize = 14)
+
+    # Test set KS curve
+    axs[1].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], label='Test Positive Class (Class 1)', color='orange')
+    axs[1].plot(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Bad'], label='Test Negative Class (Class 0)', color='orange')
+    axs[1].plot([x_max_ks_test, x_max_ks_test], [y_min_ks_test, y_max_ks_test], color='black', linestyle='--')
+    axs[1].fill_between(results_test_sorted['Cumulative Perc Population'], results_test_sorted['Cumulative Perc Good'], results_test_sorted['Cumulative Perc Bad'], color='gray', alpha=0.5)
+    axs[1].text(x=results_test_sorted['Cumulative Perc Population'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])],
+                y=(y_min_ks_test + results_test_sorted['Cumulative Perc Good'].iloc[np.argmax(results_test_sorted['Cumulative Perc Good'] - results_test_sorted['Cumulative Perc Bad'])]) / 2,
+                s=str(KS_test), fontsize = 14, color='orange', ha='left', va='center', rotation=45)
+    axs[1].set_xlabel('Cumulative Percentage of Population', fontsize = 14)
+    axs[1].set_ylabel('Cumulative Percentage', fontsize = 14)
+    axs[1].set_title(f'KS Plot - {Politica}', fontsize = 14)
+
+    # Adicione a legenda personalizada com cores
+    ks_legend_labels = [
+        {'label': f'Treino (KS: {KS_train})', 'color': 'purple', 'marker': 'o'},
+        {'label': f'Teste (KS: {KS_test})', 'color': 'orange', 'marker': 's'},
+    ]
+
+    # Criar marcadores personalizados para a legenda
+    legend_handles = [Line2D([0], [0], marker=label_info['marker'], color='w', markerfacecolor=label_info['color'], markersize=10) for label_info in ks_legend_labels]
+
+    ks_legend = axs[1].legend(handles=legend_handles, labels=[label_info['label'] for label_info in ks_legend_labels], loc='upper right', bbox_to_anchor=(0.9, 0.4), fontsize='11')
+    ks_legend.set_title('KS', prop={'size': '11'})
+
+    plt.tight_layout()
+    plt.show()
+
+def retorno_financeiro_politica(df, y_true, y_predict):
+
+    df_aux = df[['qt_parcelas', 'pagamento_mensal', 'valor_emprestimo_solicitado']].copy()
+    df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] = df_aux['pagamento_mensal']*df_aux['qt_parcelas']
+    df_aux['y_true'] = y_true['y_true'].values
+    df_aux['y_predict'] = y_predict['y_predict'].values
+
+    df_aux['caso'] = np.where((df_aux['y_true'].values == 0) & (df_aux['y_predict'].values == 0),'Verdadeiro Negativo (Cliente Bom | Modelo classifica como Bom) - Ganho a Diferença entre Valor Bruto e Valor com Juros',
+                    np.where((df_aux['y_true'].values == 1) & (df_aux['y_predict'].values == 0),'Falso Negativo (Cliente Mau | Modelo classifica como Bom) - Perco o valor emprestado',
+                    np.where((df_aux['y_true'].values == 0) & (df_aux['y_predict'].values == 1),'Falso Positivo (Cliente Bom | Modelo classifica como Mau) - Deixo de ganhar a diferença entre Valor Bruto e Valor com Juros','Verdadeiro Positivo (Cliente Mau | Modelo classifica como Mau) - Não ganho nada'
+    )))
+
+
+    df_aux['retorno_financeiro'] = np.where((df_aux['y_true'].values == 0) & (df_aux['y_predict'].values == 0),df_aux['valor_emprestimo_solicitado_com_taxa_de_juros'] - df_aux['valor_emprestimo_solicitado'],
+                                np.where((df_aux['y_true'].values == 1) & (df_aux['y_predict'].values == 0),df_aux['valor_emprestimo_solicitado'] * (-1),
+                                np.where((df_aux['y_true'].values == 0) & (df_aux['y_predict'].values == 1),0,0
+    )))
+
+    valor_de_exposicao_total = int(df_aux['valor_emprestimo_solicitado'].sum())
+    retorno_financeiro = int(df_aux['retorno_financeiro'].sum())
+    valor_conquistado = valor_de_exposicao_total + retorno_financeiro
+    return_on_portfolio = round((retorno_financeiro/valor_de_exposicao_total)*100, 2)
+    retorno_financeiro_por_caso = df_aux.groupby('caso', as_index = False)['retorno_financeiro'].sum().sort_values(by = 'retorno_financeiro', ascending = False)
+
+    # Crie um DataFrame a partir dos hiperparâmetros
+    df = retorno_financeiro_por_caso.reset_index(drop=True)
+    df = df.round(2)
+
+    def color_etapa(val):
+        color = 'black'
+        if val == 'treino':
+            color = 'blue'
+        elif val == 'teste':
+            color = 'red'
+        return f'color: {color}; font-weight: bold;'
+
+    # Função para formatar os valores com até duas casas decimais
+    def format_values(val):
+        if isinstance(val, (int, float)):
+            return f'{val:.2f}'
+        return val
+
+    # Estilizando o DataFrame
+    styled_df = df.style\
+        .format(format_values)\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px')\
+        .applymap(color_etapa, subset=pd.IndexSlice[:, :])\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: #white; font-size: 14px')\
+        .set_table_styles([
+            {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
+        ])
+
+    return retorno_financeiro, styled_df, valor_de_exposicao_total, return_on_portfolio
+
+def metricas_politica_final(Politica, df, df_grana, y, y_predict, y_predict_proba):
+
+    # Amostra Final
+    accuracy = accuracy_score(y, y_predict)
+    precision = precision_score(y, y_predict)
+    recall = recall_score(y, y_predict)
+    f1 = f1_score(y, y_predict)
+    roc_auc = roc_auc_score(y['y_true'], y_predict_proba['y_predict_proba_1'])
+    fpr, tpr, thresholds = roc_curve(y['y_true'], y_predict_proba['y_predict_proba_1'])
+    ks = max(tpr - fpr)
+    total, retorno_financeiro_por_caso, valor_de_exposicao_total, return_on_portfolio = retorno_financeiro_politica(df_grana, y, y_predict)
+    total = 'R$' + str(int(round(total/1000000, 0))) + ' MM'
+    valor_de_exposicao_total = 'R$' + str(float(round(valor_de_exposicao_total/1000000000, 3))) + 'B'
+    rocp = str(return_on_portfolio) + '%'
+    metricas_finais = pd.DataFrame({
+        # 'Acuracia': accuracy, 
+        # 'Precisao': precision, 
+        # 'Recall': recall, 
+        # 'F1-Score': f1, 
+        # 'AUC': roc_auc, 
+        # 'KS': ks, 
+        'Etapa': 'Amostra Final', 
+        'Método': Politica, 
+        'Valor Total de Exposição': valor_de_exposicao_total,
+        'Retorno Financeiro': total,
+        'Return on Credit Portfolio (ROCP)': rocp
+    }, index=[0])
+
+    df = metricas_finais.reset_index(drop=True)
+    df = df.round(2)
+
+    # Função para formatar as células com base na Etapa
+    def color_etapa(val):
+        color = 'black'
+        if val == 'treino':
+            color = 'blue'
+        elif val == 'teste':
+            color = 'red'
+        return f'color: {color}; font-weight: bold;'
+
+    # Função para formatar os valores com até duas casas decimais
+    def format_values(val):
+        if isinstance(val, (int, float)):
+            return f'{val:.2f}'
+        return val
+
+    # Estilizando o DataFrame
+    styled_df = df.style\
+        .format(format_values)\
+        .applymap(lambda x: 'color: black; font-weight: bold; background-color: white; font-size: 14px', subset=pd.IndexSlice[:, 'Etapa':])\
+        .applymap(color_etapa, subset=pd.IndexSlice[:, 'Etapa':])\
+        .set_table_styles([
+            {'selector': 'thead', 'props': [('color', 'black'), ('font-weight', 'bold'), ('background-color', 'lightgray')]}
+        ])
+
+    # Mostrando o DataFrame estilizado
+    return styled_df
+
