@@ -1240,7 +1240,7 @@ def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_prob
     roc_auc = roc_auc_score(y['situacao_do_emprestimo'], predict_proba['predict_proba_1'])
     fpr, tpr, thresholds = roc_curve(y['situacao_do_emprestimo'], predict_proba['predict_proba_1'])
     ks = max(tpr - fpr)
-    total, retorno_financeiro_por_caso, valor_de_exposicao_total, return_on_portfolio = retorno_financeiro(df, y, y_predict)
+    total, retorno_financeiro_por_caso, valor_de_exposicao_total, return_on_portfolio = retorno_financeiro(df, y_predict)
     total = 'R$' + str(int(round(total/1000000, 0))) + ' MM'
     valor_de_exposicao_total = 'R$' + str(float(round(valor_de_exposicao_total/1000000000, 3))) + 'B'
     rocp = str(return_on_portfolio) + '%'
@@ -1287,6 +1287,7 @@ def metricas_classificacao_final(classificador, df, y, y_predict, y_predict_prob
 
     # Mostrando o DataFrame estilizado
     return styled_df
+
 
 # Exemplo de chamada da função
 # Substitua os argumentos pelos seus dados reais
