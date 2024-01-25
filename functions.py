@@ -1110,11 +1110,14 @@ def woe(df, feature, target):
     woe['woe'].fillna(0, inplace = True)
     woe['iv'].fillna(0, inplace = True)
 
+    woe.sort_values(by = 'woe', ascending = True, inplace = True)
+
     weight_of_evidence = woe['woe'].unique()
     iv = round(woe['iv'].max(), 2)
 
-    x = df[feature].unique()
-    y = woe['woe']
+    x = list(df[feature].unique())
+    x.sort()
+    y = list(woe['woe'].values)
     plt.figure(figsize = (10, 4))
     plt.plot(x, y, marker = 'o', linestyle = '--', linewidth=2, color = '#1FB3E5')
     for label, value in zip(x, y):
@@ -1124,8 +1127,6 @@ def woe(df, feature, target):
     plt.xlabel('Classes', fontsize=14)
     plt.ylabel('Weight of Evidence', fontsize=14)
     plt.xticks(ha='right', fontsize = 10, rotation = 45)
-    
-    # return woe
 
 def iv(df, feature, target):
     good = df.loc[df[target] == 0].groupby(feature, as_index = False)[target].count().rename({target:'good'}, axis = 1)
