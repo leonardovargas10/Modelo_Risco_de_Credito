@@ -2744,7 +2744,7 @@ def corte_probabilidade_politica(df_politica):
     list_threshold = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     list_lucro = []
     for threshold in list_threshold:
-        df_aux['predict_proba_1'] = df_aux[[
+        df_politica['predict_proba_1'] = df_politica[[
             'taxa_de_juros_enc', 'subclasse_de_emprestimo_enc',
             'grau_de_emprestimo_enc',
             'comprometimento_de_renda_anual_enc', 'faturamento_anual_enc']].sum(axis = 1)
