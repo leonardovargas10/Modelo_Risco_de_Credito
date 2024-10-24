@@ -6,7 +6,7 @@
 
 ## Justificativa e Objetivos
 
-A tese “Análise de Risco de Crédito direcionada por Modelagem Matemática e Aprendizado de Máquina” apresenta uma introdução ao mundo do crédito auxiliado por técnicas de Matemática Aplicada, Estatística e Machine Learning para a classificação de clientes inadimplentes, a fim de auxiliar a tomada de decisão durante um processo de concessão de crédito.
+O trabalho “Análise de Risco de Crédito direcionada por Modelagem Matemática e Aprendizado de Máquina” apresenta uma introdução ao mundo do crédito auxiliado por técnicas de Matemática Aplicada, Estatística e Machine Learning para a classificação de clientes inadimplentes, a fim de auxiliar a tomada de decisão durante um processo de concessão de crédito.
 
 Direcionada pelas técnicas e ferramentas de Ciência de Dados, o software desenvolvido será responsável pela concessão de crédito de forma rápida e automática, pautando-se exclusivamente em conceitos matemáticos e estatísticos a fim de maximizar a confiança e minimizar o risco do credor.
 A base de dados utilizada será fictícia e advém da plataforma Kaggle, visto que bases de dados de concessão de crédito possuem inúmeras informações sensíveis, contudo, ela simula muito bem um ambiente real de uma instituição financeira.
@@ -28,7 +28,6 @@ O conjunto de dados Lending Club contém dados completos de empréstimos para to
 - [x] Fundamentos de GIT
 - [x] SQL
 - [x] Python
-- [x] PySpark
 - [x] Análise de Dados
 - [x] Técnicas de Modelagem Matemática e Estatística
 - [x] Técnicas de Machine Learning
