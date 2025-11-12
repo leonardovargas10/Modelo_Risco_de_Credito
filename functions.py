@@ -7,6 +7,7 @@ from IPython.display import display, Image
 from tabulate import tabulate
 from matplotlib.lines import Line2D
 from matplotlib.ticker import FuncFormatter
+from dateutil.relativedelta import relativedelta
 
 ## Bibliotecas de Modelagem Matemática e Estatística
 import numpy as np
@@ -44,6 +45,7 @@ from xgboost import XGBClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
+import shap
 
 # Bibliotecas de Métricas de Machine Learning
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
@@ -3152,3 +3154,25 @@ def retorno_financeiro_swap_in_swap_out(df):
         ])
 
     return retorno_financeiro, styled_df, valor_de_exposicao_total, return_on_portfolio
+
+def plot_shap_beeswarm(modelo_pipeline, X, titulo="SHAP Beeswarm"):
+    """
+    Plota apenas o gráfico Beeswarm de valores SHAP para um modelo XGBoost dentro de um Pipeline sklearn.
+    """
+    # --- 1) Extrai o modelo final (XGBoost) ---
+    model = modelo_pipeline.named_steps["xgbclassifier"]
+
+    # --- 2) Extrai o ColumnTransformer e aplica transformação ---
+    X_transformado = modelo_pipeline.named_steps["columntransformer"].transform(X)
+    feature_names = modelo_pipeline.named_steps["columntransformer"].get_feature_names_out()
+
+    # --- 3) Cria o SHAP Explainer e calcula valores ---
+    explainer = shap.TreeExplainer(model, feature_perturbation="tree_path_dependent")
+    shap_values = explainer.shap_values(X_transformado)
+
+    # --- 4) Plota apenas o Beeswarm ---
+    plt.figure(figsize=(12, 6))
+    shap.summary_plot(shap_values, X_transformado, feature_names=feature_names, show=False, plot_size=(12, 6))
+    plt.title(titulo, fontsize=14)
+    plt.tight_layout()
+    plt.show()
