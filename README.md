@@ -21,7 +21,7 @@
 1. [Contexto e Justificativa](#1-contexto-e-justificativa)
 2. [Objetivos](#2-objetivos)
 3. [Sobre o Lending Club](#3-sobre-o-lending-club)
-4. [Stack Tecnológica](#4-stack-tecnológica)
+4. [Fundamentação Teórica](#4-stack-tecnológica)
 5. [Fontes de Dados e Dicionário de Variáveis](#5-fontes-de-dados-e-dicionário-de-variáveis)
 6. [Arquitetura da Solução](#6-arquitetura-da-solução)
 7. [Definição da Target — Probabilidade de Default (PD)](#7-definição-da-target--probabilidade-de-default-pd)
