@@ -1,4 +1,6 @@
-﻿# Análise de Risco de Crédito direcionada por Modelagem Matemática e Aprendizado de Máquina
+﻿---
+
+## Análise de Risco de Crédito direcionada por Modelagem Matemática e Aprendizado de Máquina
 
 <p align="center">
   <img src = './img01.jpg' width = '50%'>
