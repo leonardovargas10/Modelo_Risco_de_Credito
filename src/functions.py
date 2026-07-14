@@ -3176,3 +3176,196 @@ def plot_shap_beeswarm(modelo_pipeline, X, titulo="SHAP Beeswarm"):
     plt.title(titulo, fontsize=14)
     plt.tight_layout()
     plt.show()
+
+
+# -----------------------------------------------------------------------------
+# Funções gerais de rating, migração e análise de risco
+# Rotinas extraídas e generalizadas a partir do notebook de modelagem.
+# -----------------------------------------------------------------------------
+
+def target_encoder_bad_rate(
+    df,
+    colunas_categoricas,
+    target,
+    tabelas_encoding=None,
+    percentual=True,
+    sufixo='_bad_rate',
+):
+    """Cria ou aplica target encoding pela taxa média do evento.
+
+    Se ``tabelas_encoding`` não for informado, as tabelas são aprendidas a
+    partir de ``df`` e devolvidas junto com os dados transformados. Para aplicar
+    o mesmo encoding em outra amostra, passe as tabelas retornadas anteriormente.
+    """
+    resultado = df.copy()
+    tabelas = {} if tabelas_encoding is None else tabelas_encoding
+    aprender = tabelas_encoding is None
+    escala = 100 if percentual else 1
+
+    for coluna in colunas_categoricas:
+        nome_encoding = f'{coluna}{sufixo}'
+        if aprender:
+            tabela = (
+                df.groupby(coluna, dropna=False)[target]
+                .mean().mul(escala)
+                .rename(nome_encoding).reset_index()
+            )
+            tabelas[coluna] = tabela
+        else:
+            tabela = tabelas[coluna]
+        resultado = resultado.merge(tabela, on=coluna, how='left').drop(columns=coluna)
+    return resultado, tabelas
+
+
+def formatar_valor_milhoes(valor, pos=None):
+    """Formata um valor monetário em milhões de reais."""
+    return f'R$ {valor / 1e6:.2f} MM'
+
+
+def abbreviate_number(number):
+    """Abrevia números com os sufixos K, MM e B."""
+    for fator, sufixo in ((1e9, 'B'), (1e6, 'MM'), (1e3, 'K')):
+        if abs(number) >= fator:
+            return f'{number / fator:.1f}'.rstrip('0').rstrip('.') + sufixo
+    return str(int(number))
+
+
+def calcular_rating(probabilidade_default, n_ratings=10, maior_rating_menor_risco=True):
+    """Converte probabilidades de default em ratings de frequência semelhante."""
+    probabilidades = pd.Series(probabilidade_default).astype(float)
+    if n_ratings < 2:
+        raise ValueError('n_ratings deve ser maior ou igual a 2.')
+    if probabilidades.notna().sum() < n_ratings:
+        raise ValueError('Não há observações suficientes para formar os ratings.')
+
+    # O rank evita a perda de faixas quando várias probabilidades são iguais.
+    decis = pd.qcut(
+        probabilidades.rank(method='first'),
+        q=n_ratings,
+        labels=False,
+    ).astype('Int64')
+    rating = n_ratings - 1 - decis if maior_rating_menor_risco else decis
+    return rating.rename('rating')
+
+
+def criar_base_rating(
+    df,
+    probabilidade_default,
+    nome_rating='rating_model',
+    target=None,
+    coluna_exposicao=None,
+    n_ratings=10,
+):
+    """Cria a base analítica de rating, incluindo volumetria e perda esperada."""
+    resultado = df.copy()
+    resultado['Probability of Default'] = np.asarray(probabilidade_default)
+    resultado[nome_rating] = calcular_rating(
+        resultado['Probability of Default'], n_ratings=n_ratings
+    ).to_numpy()
+    resultado['qt_pessoas_rating'] = resultado.groupby(nome_rating)[nome_rating].transform('size')
+    if coluna_exposicao is not None:
+        resultado['expected_loss'] = (
+            resultado['Probability of Default'] * resultado[coluna_exposicao]
+        )
+    if target is not None:
+        resultado['bad_rate_rating'] = resultado.groupby(nome_rating)[target].transform('mean')
+    return resultado
+
+
+def comparar_ratings(
+    df,
+    probabilidade_modelo,
+    probabilidade_politica,
+    n_ratings=10,
+):
+    """Atribui ratings do modelo e da política e classifica cada migração."""
+    resultado = df.copy()
+    resultado['Probability of Default - Modelo'] = np.asarray(probabilidade_modelo)
+    resultado['Probability of Default - Política'] = np.asarray(probabilidade_politica)
+    resultado['rating_model'] = calcular_rating(
+        resultado['Probability of Default - Modelo'], n_ratings
+    ).to_numpy()
+    resultado['rating_politica'] = calcular_rating(
+        resultado['Probability of Default - Política'], n_ratings
+    ).to_numpy()
+    resultado['mesmo_resultado'] = resultado['rating_model'].eq(resultado['rating_politica'])
+    resultado['performance_swap_in_swap_out'] = np.select(
+        [
+            resultado['rating_model'] < resultado['rating_politica'],
+            resultado['rating_model'] > resultado['rating_politica'],
+        ],
+        ['Downgrade', 'Upgrade'],
+        default='Manutencao',
+    )
+    return resultado
+
+
+def matriz_migracao_rating(
+    df,
+    rating_origem='rating_model',
+    rating_destino='rating_politica',
+    normalizar='total',
+    segmento=None,
+    coluna_segmento=None,
+):
+    """Calcula a matriz de migração de ratings, geral ou por produto.
+
+    ``normalizar`` aceita ``None`` (contagens), ``'total'`` (percentual da
+    carteira) ou ``'linha'`` (percentual dentro de cada rating de origem).
+    """
+    if segmento is not None and coluna_segmento is None:
+        raise ValueError('Informe coluna_segmento ao filtrar um segmento.')
+    dados = df if segmento is None else df.loc[df[coluna_segmento].eq(segmento)]
+    matriz = pd.crosstab(dados[rating_origem], dados[rating_destino], dropna=False)
+    ratings = sorted(set(dados[rating_origem].dropna()) | set(dados[rating_destino].dropna()))
+    matriz = matriz.reindex(index=ratings, columns=ratings, fill_value=0)
+    if normalizar is None:
+        return matriz
+    if normalizar == 'total':
+        total = matriz.to_numpy().sum()
+        return (matriz / total * 100).round(2) if total else matriz.astype(float)
+    if normalizar == 'linha':
+        return matriz.div(matriz.sum(axis=1).replace(0, np.nan), axis=0).mul(100).fillna(0).round(2)
+    raise ValueError("normalizar deve ser None, 'total' ou 'linha'.")
+
+
+def resumo_migracao_rating(df, coluna='performance_swap_in_swap_out'):
+    """Resume a volumetria absoluta e percentual de upgrades/downgrades."""
+    resumo = df[coluna].value_counts().rename('quantidade').to_frame()
+    resumo['percentual'] = (resumo['quantidade'] / len(df) * 100).round(2)
+    return resumo.rename_axis('migracao').reset_index()
+
+
+def plot_matriz_migracao_rating(matriz, titulo='Matriz de Migração de Rating', fmt='.2f'):
+    """Plota uma matriz de migração já calculada."""
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.heatmap(matriz, annot=True, cmap='Blues', fmt=fmt, linewidths=.5, ax=ax)
+    ax.set_title(titulo)
+    ax.set_xlabel('Rating de destino')
+    ax.set_ylabel('Rating de origem')
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_rating_risco(
+    df,
+    target,
+    perda_esperada,
+    rating='rating_model',
+    titulo='Risco de Crédito por Rating',
+):
+    """Plota volumetria, maus pagadores e perda esperada por rating."""
+    resumo = df.groupby(rating).agg(
+        total_pessoas=(rating, 'size'),
+        maus_pagadores=(target, 'sum'),
+        perda_esperada=(perda_esperada, 'sum'),
+    ).reset_index()
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    sns.barplot(data=resumo, x=rating, y='total_pessoas', color='#1FB3E5', ax=ax1)
+    ax1.set(title=titulo, xlabel='Rating', ylabel='Total de pessoas')
+    ax2 = ax1.twinx()
+    sns.lineplot(data=resumo, x=rating, y='maus_pagadores', marker='o', color='blue', ax=ax2)
+    sns.lineplot(data=resumo, x=rating, y='perda_esperada', marker='o', color='red', ax=ax2)
+    ax2.set_ylabel('Maus pagadores / Perda esperada')
+    fig.tight_layout()
+    return fig, (ax1, ax2)
